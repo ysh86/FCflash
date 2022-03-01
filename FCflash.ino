@@ -30,32 +30,40 @@ constexpr uint8_t OUT_A13 = 3;
 constexpr uint8_t OUT_A14 = 4;
 constexpr uint8_t OUT_ROMSEL = 16;
 
-constexpr uint8_t IN_D0 = 5;
-constexpr uint8_t IN_D1 = 6;
-constexpr uint8_t IN_D2 = 7;
-constexpr uint8_t IN_D3 = 8;
-constexpr uint8_t IN_D4 = 9;
-constexpr uint8_t IN_D5 = 10;
-constexpr uint8_t IN_D6 = 11;
-constexpr uint8_t IN_D7 = 12;
+constexpr uint8_t IO_D0 = 5;
+constexpr uint8_t IO_D1 = 6;
+constexpr uint8_t IO_D2 = 7;
+constexpr uint8_t IO_D3 = 8;
+constexpr uint8_t IO_D4 = 9;
+constexpr uint8_t IO_D5 = 10;
+constexpr uint8_t IO_D6 = 11;
+constexpr uint8_t IO_D7 = 12;
+
+// MMC/WRAM
+constexpr uint8_t OUT_PHI2 = OUT_ROMSEL; // shared
+constexpr uint8_t OUT_RW = OUT_A14;      // shared (Read:1, Write:0)
+constexpr uint8_t OUT_RAMSEL = OUT_A13;  // shared (Enable:1, disable:0)
 
 // CHR
 // TODO: OUT_PPU_A13 -> /CS HIGH
-constexpr uint8_t OUT_RD = OUT_A13; // shared
-constexpr uint8_t OUT_WR = OUT_A14; // shared N.C.
-
-// WRAM
-//DigitalOut RW(PB_8, 1); // /WE: W:0, R:1
-//DigitalOut O2(PB_9, 0); // /CS
+constexpr uint8_t OUT_RD_NROM = OUT_A13; // shared
+constexpr uint8_t OUT_RD      = OUT_A12; // shared
+// TODO: OUT_WR = OUT_A14; // shared N.C.
 
 
 /******************************************
   FC
 *****************************************/
 // Set Cartridge address
-void setAddr(uint16_t addr, uint8_t OUT_OE)
+void setA00A14(uint16_t addr)
 {
-    digitalWrite(OUT_OE, HIGH);
+    digitalWrite(OUT_A13, (addr >> 13)&1); // shared with RAMSEL
+    digitalWrite(OUT_A14, (addr >> 14)&1); // shared with CPU R/W
+
+    __asm__(
+        "nop\n\t"
+        "nop\n\t"
+    );
 
     digitalWrite(OUT_A00, addr & 1);
     digitalWrite(OUT_A01, (addr >> 1)&1);
@@ -71,8 +79,6 @@ void setAddr(uint16_t addr, uint8_t OUT_OE)
     digitalWrite(OUT_A10, (addr >> 10)&1);
     digitalWrite(OUT_A11, (addr >> 11)&1);
     digitalWrite(OUT_A12, (addr >> 12)&1);
-    digitalWrite(OUT_A13, (addr >> 13)&1);
-    digitalWrite(OUT_A14, (addr >> 14)&1);
 
     __asm__(
         "nop\n\t"
@@ -80,7 +86,7 @@ void setAddr(uint16_t addr, uint8_t OUT_OE)
     );
 }
 
-// Read one word out of the cartridge
+// Read one byte out of the cartridge
 uint8_t readByte(uint8_t OUT_OE) {
     // Pull read low
     digitalWrite(OUT_OE, LOW);
@@ -91,14 +97,14 @@ uint8_t readByte(uint8_t OUT_OE) {
 
     // read
     uint8_t temp = (
-        digitalRead(IN_D0)      |
-        digitalRead(IN_D1) << 1 |
-        digitalRead(IN_D2) << 2 |
-        digitalRead(IN_D3) << 3 |
-        digitalRead(IN_D4) << 4 |
-        digitalRead(IN_D5) << 5 |
-        digitalRead(IN_D6) << 6 |
-        digitalRead(IN_D7) << 7
+        digitalRead(IO_D0)      |
+        digitalRead(IO_D1) << 1 |
+        digitalRead(IO_D2) << 2 |
+        digitalRead(IO_D3) << 3 |
+        digitalRead(IO_D4) << 4 |
+        digitalRead(IO_D5) << 5 |
+        digitalRead(IO_D6) << 6 |
+        digitalRead(IO_D7) << 7
     );
 
 
@@ -111,7 +117,89 @@ uint8_t readByte(uint8_t OUT_OE) {
 
     return temp;
 }
+void writeByte(uint8_t OUT_CE, uint8_t OUT_WE, uint8_t data) {
+    pinMode(IO_D0, OUTPUT);
+    pinMode(IO_D1, OUTPUT);
+    pinMode(IO_D2, OUTPUT);
+    pinMode(IO_D3, OUTPUT);
+    pinMode(IO_D4, OUTPUT);
+    pinMode(IO_D5, OUTPUT);
+    pinMode(IO_D6, OUTPUT);
+    pinMode(IO_D7, OUTPUT);
 
+    // write
+    digitalWrite(IO_D0, data & 1);
+    digitalWrite(IO_D1, (data >> 1)&1);
+    digitalWrite(IO_D2, (data >> 2)&1);
+    digitalWrite(IO_D3, (data >> 3)&1);
+    digitalWrite(IO_D4, (data >> 4)&1);
+    digitalWrite(IO_D5, (data >> 5)&1);
+    digitalWrite(IO_D6, (data >> 6)&1);
+    digitalWrite(IO_D7, (data >> 7)&1);
+    __asm__(
+        "nop\n\t"
+        "nop\n\t"
+    );
+
+    // Pull write low
+    digitalWrite(OUT_CE, LOW);
+    __asm__(
+        "nop\n\t"
+        "nop\n\t"
+    );
+
+    // Pull write high
+    digitalWrite(OUT_WE, HIGH);
+    digitalWrite(OUT_CE, HIGH);
+    __asm__(
+        "nop\n\t"
+        "nop\n\t"
+    );
+
+    pinMode(IO_D0, INPUT_PULLUP);
+    pinMode(IO_D1, INPUT_PULLUP);
+    pinMode(IO_D2, INPUT_PULLUP);
+    pinMode(IO_D3, INPUT_PULLUP);
+    pinMode(IO_D4, INPUT_PULLUP);
+    pinMode(IO_D5, INPUT_PULLUP);
+    pinMode(IO_D6, INPUT_PULLUP);
+    pinMode(IO_D7, INPUT_PULLUP);
+}
+
+
+/******************************************
+  Host
+*****************************************/
+#define PACKET_SIZE (0x400)
+
+// request
+#define REQ_ECHO            0
+#define REQ_PHI2_INIT       1
+#define REQ_CPU_READ_6502   2
+#define REQ_CPU_READ        3
+#define REQ_CPU_WRITE_6502  4
+#define REQ_CPU_WRITE_FLASH 5
+#define REQ_PPU_READ        6
+#define REQ_PPU_WRITE       7
+
+// index
+#define INDEX_IMPLIED 0
+#define INDEX_CPU     1
+#define INDEX_PPU     2
+#define INDEX_BOTH    3
+
+typedef struct Message {
+    uint8_t  _reserved;
+    uint8_t  request;
+    uint16_t value;
+    uint16_t index;
+    uint16_t length;
+} Message_t;
+
+
+/******************************************
+  Arduino
+*****************************************/
 void setup() {
     Serial.begin(115200);
 
@@ -146,104 +234,84 @@ void setup() {
     pinMode(OUT_A14, OUTPUT);
     pinMode(OUT_ROMSEL, OUTPUT);
 
+    digitalWrite(OUT_RAMSEL, LOW);
     digitalWrite(OUT_ROMSEL, HIGH);
-    //digitalWrite(OUT_PPU_A13, HIGH);
-    digitalWrite(OUT_RD, HIGH);
-    digitalWrite(OUT_WR, HIGH);
+    digitalWrite(OUT_PHI2,   HIGH);
+    digitalWrite(OUT_RW,     HIGH);
 
-    pinMode(IN_D0, INPUT_PULLUP);
-    pinMode(IN_D1, INPUT_PULLUP);
-    pinMode(IN_D2, INPUT_PULLUP);
-    pinMode(IN_D3, INPUT_PULLUP);
-    pinMode(IN_D4, INPUT_PULLUP);
-    pinMode(IN_D5, INPUT_PULLUP);
-    pinMode(IN_D6, INPUT_PULLUP);
-    pinMode(IN_D7, INPUT_PULLUP);
+    //digitalWrite(OUT_PPU_A13, HIGH);
+    //digitalWrite(OUT_RD_NROM, HIGH);
+    digitalWrite(OUT_RD,      HIGH);
+    //digitalWrite(OUT_WR,      HIGH);
+
+    pinMode(IO_D0, INPUT_PULLUP);
+    pinMode(IO_D1, INPUT_PULLUP);
+    pinMode(IO_D2, INPUT_PULLUP);
+    pinMode(IO_D3, INPUT_PULLUP);
+    pinMode(IO_D4, INPUT_PULLUP);
+    pinMode(IO_D5, INPUT_PULLUP);
+    pinMode(IO_D6, INPUT_PULLUP);
+    pinMode(IO_D7, INPUT_PULLUP);
 }
 
-
 #define PRG_BASE 0x8000
-#define CHR_BASE 0x6000 // PPU /WR, PPU /RD -> HIGH
-
-#define READ_BUF_SIZE (1024)
-static uint8_t readbuf[READ_BUF_SIZE];
+static uint8_t readbuf[PACKET_SIZE];
 
 
 /******************************************
   main
 *****************************************/
 
-void confirm()
-{
-    Serial.println("");
-    Serial.println("ready?");
-    int tmp;
-    do {
-        delay(10); // [msec]
-        tmp = Serial.read();
-    } while (tmp == -1);
+void readBytes(uint8_t OUT_OE, uint16_t addr, uint8_t buf[], uint16_t length) {
+    for (uint16_t currByte = 0; currByte < length; currByte++) {
+        noInterrupts();
+        setA00A14(addr + currByte);
+        buf[currByte] = readByte(OUT_OE);
+        interrupts();
+    }
 }
 
 void loop() {
-    confirm();
-
-    uint16_t prg_bytes = 32 * 1024;
-    Serial.print("read PRG ");
-    Serial.print(prg_bytes);
-    Serial.println("[bytes]");
-    uint16_t chr_bytes = 8 * 1024;
-    Serial.print("read CHR ");
-    Serial.print(chr_bytes);
-    Serial.println("[bytes]");
-
-    Serial.println("set PPU A13(56) to HIGH!");
-    confirm();
-
-    // PRG
-    {
-        for(uint16_t size = 0; size < prg_bytes; size += READ_BUF_SIZE) {
-            for (uint16_t currByte = 0; currByte < READ_BUF_SIZE; currByte++) {
-                noInterrupts();
-                setAddr(PRG_BASE + size + currByte, OUT_ROMSEL);
-                readbuf[currByte] = readByte(OUT_ROMSEL);
-                interrupts();
-            }
-            // dump
-            for (uint16_t y = 0; y < READ_BUF_SIZE; y += 16) {
-                Serial.print(PRG_BASE + size + y, HEX);
-                for (uint16_t x = 0; x < 16; x++) {
-                    Serial.print(" ");
-                    Serial.print(readbuf[y+x], HEX);
-                }
-                Serial.println("");
-            }
-            confirm();
-        }
+    if (Serial.available() < 8) {
+        return;
     }
-    Serial.println("PRG done");
 
-    Serial.println("set PPU A13(56) to LOW!");
-    confirm();
+    Message_t msg;
+    Serial.readBytes((uint8_t *)&msg, sizeof(msg));
 
-    // CHR
-    {
-        for(uint16_t size = 0; size < chr_bytes; size += READ_BUF_SIZE) {
-            for (uint16_t currByte = 0; currByte < READ_BUF_SIZE; currByte++) {
-                noInterrupts();
-                setAddr(CHR_BASE + size + currByte, OUT_RD);
-                readbuf[currByte] = readByte(OUT_RD);
-                interrupts();
-            }
-            // dump
-            for (uint16_t y = 0; y < READ_BUF_SIZE; y += 16) {
-                Serial.print(CHR_BASE + size + y, HEX);
-                for (uint16_t x = 0; x < 16; x++) {
-                    Serial.print(" ");
-                    Serial.print(readbuf[y+x], HEX);
-                }
-                Serial.println("");
-            }
+    uint16_t addr = msg.value;
+    if (msg.request == REQ_CPU_READ) {
+        // addr
+        // NROM:  0b1xxx_xxxx... 32KB full
+        // TxROM: 0b110x_xxxx... 8KB  0xc000-0xdfff
+        addr = PRG_BASE | addr;
+        if (msg.length <= PACKET_SIZE) {
+            readBytes(OUT_ROMSEL, addr, readbuf, msg.length);
+            Serial.write(readbuf, msg.length);
         }
+        return;
     }
-    Serial.println("CHR done");
+    if (msg.request == REQ_CPU_WRITE_6502) {
+        // addr
+        // 0b1001_xxxx... 0x9000-0x9fff only
+        addr = PRG_BASE | (addr & ~0x6000) | 0x1000;
+        uint8_t data = msg.length & 0xff;
+        noInterrupts();
+        setA00A14(addr);
+        writeByte(OUT_ROMSEL, OUT_RW, data);
+        interrupts();
+        return;
+    }
+    if (msg.request == REQ_PPU_READ) {
+        // addr
+        // NROM:  0b0x1x_xxxx... 8KB full
+        // TxROM: 0b0x00_xxxx... 4KB first half only
+        addr = (addr & 0x2000) ? (0x4000 | addr) : (0x5000 | addr);
+        uint8_t OUT_OE = (addr & 0x2000) ? OUT_RD_NROM : OUT_RD;
+        if (msg.length <= PACKET_SIZE) {
+            readBytes(OUT_OE, addr, readbuf, msg.length);
+            Serial.write(readbuf, msg.length);
+        }
+        return;
+    }
 }
