@@ -118,6 +118,12 @@ uint8_t readByte(uint8_t OUT_OE) {
     return temp;
 }
 void writeByte(uint8_t OUT_CE, uint8_t OUT_WE, uint8_t data) {
+    digitalWrite(OUT_WE, LOW);
+    __asm__(
+        "nop\n\t"
+        "nop\n\t"
+    );
+
     pinMode(IO_D0, OUTPUT);
     pinMode(IO_D1, OUTPUT);
     pinMode(IO_D2, OUTPUT);
@@ -147,14 +153,14 @@ void writeByte(uint8_t OUT_CE, uint8_t OUT_WE, uint8_t data) {
         "nop\n\t"
         "nop\n\t"
     );
-
     // Pull write high
-    digitalWrite(OUT_WE, HIGH);
     digitalWrite(OUT_CE, HIGH);
     __asm__(
         "nop\n\t"
         "nop\n\t"
     );
+
+    digitalWrite(OUT_WE, HIGH);
 
     pinMode(IO_D0, INPUT_PULLUP);
     pinMode(IO_D1, INPUT_PULLUP);

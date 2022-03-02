@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/binary"
 	"errors"
 	"flag"
 	"fmt"
@@ -133,26 +132,13 @@ func main() {
 	io.ReadAtLeast(os.Stdin, buf[0:1], 1)
 
 	// PRG
-	for i := 0; i < prg*16*1024; i += PACKET_SIZE {
-		buf[0] = 0 // _reserverd
-		buf[1] = uint8(REQ_CPU_READ)
-		binary.LittleEndian.PutUint16(buf[2:4], 0x8000|uint16(i))      // Value
-		binary.LittleEndian.PutUint16(buf[4:6], uint16(INDEX_IMPLIED)) // index
-		binary.LittleEndian.PutUint16(buf[6:8], PACKET_SIZE)           // Length
-		_, err = s.Write(buf[0:8])
-		if err != nil {
-			panic(err)
-		}
-
-		_, err = io.ReadFull(s, buf)
-		if err != nil {
-			panic(err)
-		}
-
-		_, err = f.Write(buf)
-		if err != nil {
-			panic(err)
-		}
+	if mapper == 0 {
+		err = dumpNromPRG(f, s, prg, buf)
+	} else {
+		err = dumpTxromPRG(f, s, prg, buf)
+	}
+	if err != nil {
+		panic(err)
 	}
 	fmt.Println("done PRG")
 
@@ -162,26 +148,13 @@ func main() {
 	io.ReadAtLeast(os.Stdin, buf[0:1], 1)
 
 	// CHR
-	for i := 0; i < chr*8*1024; i += PACKET_SIZE {
-		buf[0] = 0 // _reserverd
-		buf[1] = uint8(REQ_PPU_READ)
-		binary.LittleEndian.PutUint16(buf[2:4], 0x2000|uint16(i))      // Value: 0x2000 special flag for the Tuna board :)
-		binary.LittleEndian.PutUint16(buf[4:6], uint16(INDEX_IMPLIED)) // index
-		binary.LittleEndian.PutUint16(buf[6:8], PACKET_SIZE)           // Length
-		_, err = s.Write(buf[0:8])
-		if err != nil {
-			panic(err)
-		}
-
-		_, err = io.ReadFull(s, buf)
-		if err != nil {
-			panic(err)
-		}
-
-		_, err = f.Write(buf)
-		if err != nil {
-			panic(err)
-		}
+	if mapper == 0 {
+		err = dumpNromCHR(f, s, chr, buf)
+	} else {
+		err = dumpTxromCHR(f, s, chr, buf)
+	}
+	if err != nil {
+		panic(err)
 	}
 	fmt.Println("done CHR")
 }
