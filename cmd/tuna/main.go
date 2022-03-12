@@ -121,13 +121,6 @@ func main() {
 	}
 	fmt.Println("Mirroring:", m)
 	fmt.Println("----")
-	if mapper == 0 {
-		fmt.Println("NROM: connect PPU /RD(17) to D3/PD0")
-	} else {
-		fmt.Println("TxROM: connect PPU /RD(17) to D2/PD1")
-	}
-	fmt.Println("----")
-	fmt.Println("connect PPU A13(56) to HIGH")
 	fmt.Println("ready?")
 	io.ReadAtLeast(os.Stdin, buf[0:1], 1)
 
@@ -141,11 +134,6 @@ func main() {
 		panic(err)
 	}
 	fmt.Println("done PRG")
-
-	fmt.Println("----")
-	fmt.Println("connect PPU A13(56) to LOW")
-	fmt.Println("ready?")
-	io.ReadAtLeast(os.Stdin, buf[0:1], 1)
 
 	// CHR
 	if mapper == 0 {
