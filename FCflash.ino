@@ -96,44 +96,6 @@ void setA08A14(uint16_t addr)
 uint8_t readByte(uint8_t OUT_OE) {
     // Pull read low
     digitalWrite(OUT_OE, LOW);
-    __asm__(
-        "nop\n\t"
-        "nop\n\t"
-    );
-
-    // read
-    uint8_t temp = (
-        digitalRead(IO_D0)      |
-        digitalRead(IO_D1) << 1 |
-        digitalRead(IO_D2) << 2 |
-        digitalRead(IO_D3) << 3 |
-        digitalRead(IO_D4) << 4 |
-        digitalRead(IO_D5) << 5 |
-        digitalRead(IO_D6) << 6 |
-        digitalRead(IO_D7) << 7
-    );
-
-
-    // Pull read high
-    digitalWrite(OUT_OE, HIGH);
-    __asm__(
-        "nop\n\t"
-        "nop\n\t"
-    );
-
-    return temp;
-}
-uint8_t readByte2() {
-    // Pull read low
-    digitalWrite(OUT_PHI2, LOW);
-    __asm__(
-        "nop\n\t"
-        "nop\n\t"
-    );
-
-    // pos edge
-
-    // Pull read high
     digitalWrite(OUT_PHI2, HIGH);
     __asm__(
         "nop\n\t"
@@ -150,6 +112,15 @@ uint8_t readByte2() {
         digitalRead(IO_D5) << 5 |
         digitalRead(IO_D6) << 6 |
         digitalRead(IO_D7) << 7
+    );
+
+
+    // Pull read high
+    digitalWrite(OUT_PHI2, LOW);
+    digitalWrite(OUT_OE, HIGH);
+    __asm__(
+        "nop\n\t"
+        "nop\n\t"
     );
 
     return temp;
@@ -186,11 +157,13 @@ void writeByte(uint8_t OUT_CE, uint8_t OUT_WE, uint8_t data) {
 
     // Pull write low
     digitalWrite(OUT_CE, LOW);
+    digitalWrite(OUT_PHI2, HIGH);
     __asm__(
         "nop\n\t"
         "nop\n\t"
     );
     // Pull write high
+    digitalWrite(OUT_PHI2, LOW);
     digitalWrite(OUT_CE, HIGH);
     __asm__(
         "nop\n\t"
@@ -282,8 +255,8 @@ void setup() {
     digitalWrite(OUT_PHI2,   LOW);
 
     digitalWrite(OUT_PPU_A13, HIGH);
-    //digitalWrite(OUT_PPU_WR,      HIGH);
-    digitalWrite(OUT_PPU_RD,      HIGH);
+    //digitalWrite(OUT_PPU_WR,  HIGH);
+    digitalWrite(OUT_PPU_RD,  HIGH);
 
     clearA00A07();
 
@@ -339,7 +312,9 @@ void loop() {
         // 0b1001_xxxx... 0x9000-0x9fff only
         addr = PRG_BASE | (addr & ~0x6000) | 0x1000;
         uint8_t data = msg.length & 0xff;
+        clearA00A07();
         noInterrupts();
+        nextA00A07(addr&1);
         setA08A14(addr);
         writeByte(OUT_ROMSEL, OUT_CPU_RW, data);
         interrupts();
