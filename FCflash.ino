@@ -12,35 +12,37 @@
 *****************************************/
 
 // PRG/CHR
-constexpr uint8_t OUT_A00_07_CLR = 14; // All LOW:1
-constexpr uint8_t OUT_A00 = 15;        // next:neg edge
+constexpr uint8_t OUT_A00_07_CLR = 22; // PF1: All LOW:1
+constexpr uint8_t OUT_A00 = 23;        // PF0: next:neg edge
 
-constexpr uint8_t OUT_A08 = 13;
-constexpr uint8_t OUT_A09 = 17;
-constexpr uint8_t OUT_A10 = 1;
-constexpr uint8_t OUT_A11 = 0;
-constexpr uint8_t OUT_A12 = 2;
-constexpr uint8_t OUT_CPU_A13 = 3;
-constexpr uint8_t OUT_PPU_A13 = 16;
-constexpr uint8_t OUT_CPU_A14 = 4;
-constexpr uint8_t OUT_ROMSEL = 23;
+constexpr uint8_t OUT_A08 = 17;        // PB0:
+constexpr uint8_t OUT_A09 = 15;        // PB1:
+constexpr uint8_t OUT_A10 = 16;        // PB2:
+constexpr uint8_t OUT_A11 = 14;        // PB3:
+constexpr uint8_t OUT_A12 = 8;         // PB4:
+constexpr uint8_t OUT_CPU_A13 = 9;     // PB5:
+constexpr uint8_t OUT_PPU_A13 = 4;     // PD4:
+constexpr uint8_t OUT_CPU_A14 = 10;    // PB6:
+constexpr uint8_t OUT_ROMSEL = 11;     // PB7:
 
-constexpr uint8_t IO_D0 = 5;
-constexpr uint8_t IO_D1 = 6;
-constexpr uint8_t IO_D2 = 7;
-constexpr uint8_t IO_D3 = 8;
-constexpr uint8_t IO_D4 = 9;
-constexpr uint8_t IO_D5 = 10;
-constexpr uint8_t IO_D6 = 11;
-constexpr uint8_t IO_D7 = 12;
+constexpr uint8_t IO_D0 = 3;           // PD0:
+constexpr uint8_t IO_D1 = 2;           // PD1:
+constexpr uint8_t IO_D2 = 0;           // PD2:
+constexpr uint8_t IO_D3 = 1;           // PD3:
+constexpr uint8_t IO_D4 = 21;          // PF4:
+constexpr uint8_t IO_D5 = 20;          // PF5:
+constexpr uint8_t IO_D6 = 19;          // PF6:
+constexpr uint8_t IO_D7 = 18;          // PF7:
 
 // MMC/W-RAM
-constexpr uint8_t OUT_PHI2 = 21;
-constexpr uint8_t OUT_CPU_RW = 22; // Read:1, Write:0
+constexpr uint8_t OUT_PHI2 = 7;        // PE6:
+constexpr uint8_t OUT_CPU_RW = 6;      // PD7: Read:1, Write:0
 
 // CHR
-// TODO: OUT_PPU_WR = 19; // N.C.
-constexpr uint8_t OUT_PPU_RD = 20;
+// TODO: OUT_PPU_WR = 13;              // PC7: N.C.
+constexpr uint8_t OUT_PPU_RD = 5;      // PC6:
+
+#define PHI2(__b__) (PORTE = PORTE&0b10111111|(__b__<<6))
 
 
 /******************************************
@@ -67,25 +69,11 @@ void clearA00A07()
 }
 void nextA00A07(uint8_t lo_addr)
 {
-    digitalWrite(OUT_A00, lo_addr&1);
-    __asm__(
-        "nop\n\t"
-        "nop\n\t"
-        "nop\n\t"
-        "nop\n\t"
-    );
+    PORTF = (PORTF & 0b11111110) | (lo_addr&1);
 }
-void setA08A14(uint16_t addr)
+void setA08A14(uint16_t hi_addr)
 {
-    digitalWrite(OUT_A08, (addr >> 8 )&1);
-    digitalWrite(OUT_A09, (addr >> 9 )&1);
-    digitalWrite(OUT_A10, (addr >> 10)&1);
-    digitalWrite(OUT_A11, (addr >> 11)&1);
-    digitalWrite(OUT_A12, (addr >> 12)&1);
-
-    digitalWrite(OUT_CPU_A13, (addr >> 13)&1);
-    digitalWrite(OUT_CPU_A14, (addr >> 14)&1);
-
+    PORTB = (PORTB & 0x80) | ((hi_addr >> 8) & 0x7f);
     __asm__(
         "nop\n\t"
         "nop\n\t"
@@ -93,93 +81,52 @@ void setA08A14(uint16_t addr)
 }
 
 // Read one byte out of the cartridge
-uint8_t readByte(uint8_t OUT_OE) {
-    // Pull read low
-    digitalWrite(OUT_OE, LOW);
-    digitalWrite(OUT_PHI2, HIGH);
+uint8_t readByte(uint8_t OUT_CS) {
+    // already disabled all chips (PRG, W-RAM & CHR)
+    digitalWrite(OUT_CS, LOW); // select chip
+    PHI2(1);                   // enable read & set addr
     __asm__(
+        "nop\n\t"
         "nop\n\t"
         "nop\n\t"
     );
 
     // read
-    uint8_t temp = (
-        digitalRead(IO_D0)      |
-        digitalRead(IO_D1) << 1 |
-        digitalRead(IO_D2) << 2 |
-        digitalRead(IO_D3) << 3 |
-        digitalRead(IO_D4) << 4 |
-        digitalRead(IO_D5) << 5 |
-        digitalRead(IO_D6) << 6 |
-        digitalRead(IO_D7) << 7
-    );
+    uint8_t temp = (PINF & 0xf0) | (PIND & 0x0f);
 
-
-    // Pull read high
-    digitalWrite(OUT_PHI2, LOW);
-    digitalWrite(OUT_OE, HIGH);
+    PHI2(0);
+    digitalWrite(OUT_CS, HIGH);
     __asm__(
-        "nop\n\t"
         "nop\n\t"
     );
 
     return temp;
 }
-void writeByte(uint8_t OUT_CE, uint8_t OUT_WE, uint8_t data) {
-    digitalWrite(OUT_WE, LOW);
-    __asm__(
-        "nop\n\t"
-        "nop\n\t"
-    );
-
-    pinMode(IO_D0, OUTPUT);
-    pinMode(IO_D1, OUTPUT);
-    pinMode(IO_D2, OUTPUT);
-    pinMode(IO_D3, OUTPUT);
-    pinMode(IO_D4, OUTPUT);
-    pinMode(IO_D5, OUTPUT);
-    pinMode(IO_D6, OUTPUT);
-    pinMode(IO_D7, OUTPUT);
+void writeByte(uint8_t OUT_CS, uint8_t OUT_WE, uint8_t data) {
+    // already disabled both chips (MMC & W-RAM)
+    digitalWrite(OUT_WE, LOW); // enable write
 
     // write
-    digitalWrite(IO_D0, data & 1);
-    digitalWrite(IO_D1, (data >> 1)&1);
-    digitalWrite(IO_D2, (data >> 2)&1);
-    digitalWrite(IO_D3, (data >> 3)&1);
-    digitalWrite(IO_D4, (data >> 4)&1);
-    digitalWrite(IO_D5, (data >> 5)&1);
-    digitalWrite(IO_D6, (data >> 6)&1);
-    digitalWrite(IO_D7, (data >> 7)&1);
+    DDRD |= 0x0f;
+    DDRF |= 0xf0;
+    PORTD = (PORTD & 0xf0) | (data & 0x0f);
+    PORTF = (PORTF & 0x0f) | (data & 0xf0);
+
+    digitalWrite(OUT_CS, LOW); // select MMC:0 or W-RAM:1
+    PHI2(1);                   // enable that chip & set addr
     __asm__(
         "nop\n\t"
         "nop\n\t"
     );
 
-    // Pull write low
-    digitalWrite(OUT_CE, LOW);
-    digitalWrite(OUT_PHI2, HIGH);
-    __asm__(
-        "nop\n\t"
-        "nop\n\t"
-    );
-    // Pull write high
-    digitalWrite(OUT_PHI2, LOW);
-    digitalWrite(OUT_CE, HIGH);
-    __asm__(
-        "nop\n\t"
-        "nop\n\t"
-    );
+    // latch
+    PHI2(0);
+    digitalWrite(OUT_CS, HIGH);
+
+    DDRD &= ~0x0f;
+    DDRF &= ~0xf0;
 
     digitalWrite(OUT_WE, HIGH);
-
-    pinMode(IO_D0, INPUT_PULLUP);
-    pinMode(IO_D1, INPUT_PULLUP);
-    pinMode(IO_D2, INPUT_PULLUP);
-    pinMode(IO_D3, INPUT_PULLUP);
-    pinMode(IO_D4, INPUT_PULLUP);
-    pinMode(IO_D5, INPUT_PULLUP);
-    pinMode(IO_D6, INPUT_PULLUP);
-    pinMode(IO_D7, INPUT_PULLUP);
 }
 
 
@@ -247,8 +194,11 @@ void setup() {
 
     pinMode(OUT_PHI2, OUTPUT);
     pinMode(OUT_CPU_RW, OUTPUT);
-    //pinMode(OUT_PPU_WR, OUTPUT); TODO: open drain
+    //pinMode(OUT_PPU_WR, OUTPUT);
     pinMode(OUT_PPU_RD, OUTPUT);
+
+    clearA00A07();
+    setA08A14(0);
 
     digitalWrite(OUT_CPU_RW, HIGH);
     digitalWrite(OUT_ROMSEL, HIGH);
@@ -257,8 +207,6 @@ void setup() {
     digitalWrite(OUT_PPU_A13, HIGH);
     //digitalWrite(OUT_PPU_WR,  HIGH);
     digitalWrite(OUT_PPU_RD,  HIGH);
-
-    clearA00A07();
 
     pinMode(IO_D0, INPUT_PULLUP);
     pinMode(IO_D1, INPUT_PULLUP);
@@ -278,13 +226,13 @@ static uint8_t readbuf[PACKET_SIZE];
   main
 *****************************************/
 
-void readBytes(uint8_t OUT_OE, uint16_t addr, uint8_t buf[], uint16_t length) {
+void readBytes(uint8_t OUT_CS, uint16_t addr, uint8_t buf[], uint16_t length) {
     clearA00A07();
     for (uint16_t currByte = 0; currByte < length; currByte++) {
         noInterrupts();
         nextA00A07(currByte);
         setA08A14(addr + currByte);
-        buf[currByte] = readByte(OUT_OE);
+        buf[currByte] = readByte(OUT_CS);
         interrupts();
     }
 }
@@ -308,9 +256,8 @@ void loop() {
         return;
     }
     if (msg.request == REQ_CPU_WRITE_6502) {
-        // addr
-        // 0b1001_xxxx... 0x9000-0x9fff only
-        addr = PRG_BASE | (addr & ~0x6000) | 0x1000;
+        // addr: 0b100x_xxxx... 0x8000-0x9fff only
+        addr = PRG_BASE | (addr & ~0x6000);
         uint8_t data = msg.length & 0xff;
         clearA00A07();
         noInterrupts();
@@ -323,12 +270,12 @@ void loop() {
     if (msg.request == REQ_PPU_READ) {
         // addr: 0b000x_xxxx... 8KB full
         addr &= 0x1fff;
-        digitalWrite(OUT_PPU_A13, LOW);
+        digitalWrite(OUT_PPU_RD, LOW);
         if (msg.length <= PACKET_SIZE) {
-            readBytes(OUT_PPU_RD, addr, readbuf, msg.length);
+            readBytes(OUT_PPU_A13, addr, readbuf, msg.length);
             Serial.write(readbuf, msg.length);
         }
-        digitalWrite(OUT_PPU_A13, HIGH);
+        digitalWrite(OUT_PPU_RD, HIGH);
         return;
     }
 }
