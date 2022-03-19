@@ -42,6 +42,7 @@ constexpr uint8_t OUT_CPU_RW = 6;      // PD7: Read:1, Write:0
 // TODO: OUT_PPU_WR = 13;              // PC7: N.C.
 constexpr uint8_t OUT_PPU_RD = 5;      // PC6:
 
+#define ROMSEL(__b__) (PORTB = PORTB&0b01111111|(__b__<<7))
 #define PHI2(__b__) (PORTE = PORTE&0b10111111|(__b__<<6))
 
 
@@ -83,8 +84,14 @@ void setA08A14(uint16_t hi_addr)
 // Read one byte out of the cartridge
 uint8_t readByte(uint8_t OUT_CS) {
     // already disabled all chips (PRG, W-RAM & CHR)
-    digitalWrite(OUT_CS, LOW); // select chip
-    PHI2(1);                   // enable read & set addr
+    if (OUT_CS == OUT_ROMSEL) {
+        // PRG
+        ROMSEL(0); // select chip
+        PHI2(1);   // enable read & set addr
+    } else {
+        // CHR
+        digitalWrite(OUT_CS, LOW); // enable chip
+    }
     __asm__(
         "nop\n\t"
         "nop\n\t"
@@ -94,8 +101,14 @@ uint8_t readByte(uint8_t OUT_CS) {
     // read
     uint8_t temp = (PINF & 0xf0) | (PIND & 0x0f);
 
-    PHI2(0);
-    digitalWrite(OUT_CS, HIGH);
+    if (OUT_CS == OUT_ROMSEL) {
+        // PRG
+        PHI2(0);
+        ROMSEL(1);
+    } else {
+        // CHR
+        digitalWrite(OUT_CS, HIGH);
+    }
     __asm__(
         "nop\n\t"
     );
@@ -112,8 +125,8 @@ void writeByte(uint8_t OUT_CS, uint8_t OUT_WE, uint8_t data) {
     PORTD = (PORTD & 0xf0) | (data & 0x0f);
     PORTF = (PORTF & 0x0f) | (data & 0xf0);
 
-    digitalWrite(OUT_CS, LOW); // select MMC:0 or W-RAM:1
-    PHI2(1);                   // enable that chip & set addr
+    ROMSEL(0); // select MMC:0 or W-RAM:1
+    PHI2(1);   // enable that chip & set addr
     __asm__(
         "nop\n\t"
         "nop\n\t"
@@ -121,7 +134,7 @@ void writeByte(uint8_t OUT_CS, uint8_t OUT_WE, uint8_t data) {
 
     // latch
     PHI2(0);
-    digitalWrite(OUT_CS, HIGH);
+    ROMSEL(1);
 
     DDRD &= ~0x0f;
     DDRF &= ~0xf0;
