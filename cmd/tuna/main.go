@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"errors"
 	"flag"
 	"fmt"
@@ -26,6 +27,9 @@ const (
 
 	REQ_PPU_READ
 	REQ_PPU_WRITE
+
+	REQ_CPU_WRITE_EEP = 16
+	REQ_PPU_WRITE_EEP = 17
 )
 
 type Index uint16
@@ -48,13 +52,14 @@ type Message struct {
 func main() {
 	// args
 	var (
-		com    int
-		baud   int
-		mapper int
-		prg    int
-		chr    int
-		mirror int
-		output string
+		com      int
+		baud     int
+		mapper   int
+		prg      int
+		chr      int
+		mirror   int
+		eeprom   bool
+		fileName string
 	)
 	flag.IntVar(&com, "com", 5, "com port")
 	flag.IntVar(&baud, "baud", 115200, "baud rate")
@@ -62,12 +67,13 @@ func main() {
 	flag.IntVar(&prg, "prg", 32, "Size of PRG ROM in 16KB units")
 	flag.IntVar(&chr, "chr", 32, "Size of CHR ROM in 8KB units (Value 0 means the board uses CHR RAM)")
 	flag.IntVar(&mirror, "mirror", 0, "0:H, 1:V, 2:battery-backed PRG RAM")
+	flag.BoolVar(&eeprom, "eeprom", false, "write NROM EEPROM")
 	flag.Parse()
 	args := flag.Args()
 	if len(args) < 1 {
-		panic(errors.New("no output file"))
+		panic(errors.New("no file name"))
 	}
-	output = args[0]
+	fileName = args[0]
 
 	// COM
 	comport := "/dev/ttyS" + strconv.Itoa(com)
@@ -79,13 +85,76 @@ func main() {
 	defer s.Close()
 
 	// start
-	f, err := os.Create(output)
+	buf := make([]uint8, PACKET_SIZE)
+
+	// EEPROM
+	if eeprom {
+		f, err := os.Open(fileName)
+		if err != nil {
+			panic(err)
+		}
+		defer f.Close()
+
+		// skip header
+		_, err = f.Seek(16, io.SeekStart)
+		if err != nil {
+			panic(err)
+		}
+
+		// PRG
+		for i := 0; i < 32*1024; i += PACKET_SIZE {
+			buf[0] = 0 // _reserverd
+			buf[1] = uint8(REQ_CPU_WRITE_EEP)
+			binary.LittleEndian.PutUint16(buf[2:4], 0x8000|uint16(i))      // Value
+			binary.LittleEndian.PutUint16(buf[4:6], uint16(INDEX_IMPLIED)) // index
+			binary.LittleEndian.PutUint16(buf[6:8], PACKET_SIZE)           // Length
+			_, err = s.Write(buf[0:8])
+			if err != nil {
+				panic(err)
+			}
+
+			_, err = io.ReadFull(f, buf)
+			if err != nil {
+				panic(err)
+			}
+
+			_, err = s.Write(buf)
+			if err != nil {
+				panic(err)
+			}
+		}
+		// CHR
+		for i := 0; i < 8*1024; i += PACKET_SIZE {
+			buf[0] = 0 // _reserverd
+			buf[1] = uint8(REQ_PPU_WRITE_EEP)
+			binary.LittleEndian.PutUint16(buf[2:4], uint16(i))             // Value
+			binary.LittleEndian.PutUint16(buf[4:6], uint16(INDEX_IMPLIED)) // index
+			binary.LittleEndian.PutUint16(buf[6:8], PACKET_SIZE)           // Length
+			_, err = s.Write(buf[0:8])
+			if err != nil {
+				panic(err)
+			}
+
+			_, err = io.ReadFull(f, buf)
+			if err != nil {
+				panic(err)
+			}
+
+			_, err = s.Write(buf)
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		return
+	}
+
+	// dump
+	f, err := os.Create(fileName)
 	if err != nil {
 		panic(err)
 	}
 	defer f.Close()
-
-	buf := make([]uint8, PACKET_SIZE)
 
 	// header
 	buf[0] = 'N'

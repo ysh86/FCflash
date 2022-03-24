@@ -45,6 +45,10 @@ constexpr uint8_t OUT_PPU_RD = 5;      // PC6:
 #define ROMSEL(__b__) (PORTB = PORTB&0b01111111|(__b__<<7))
 #define PHI2(__b__) (PORTE = PORTE&0b10111111|(__b__<<6))
 
+// EEPROM
+constexpr uint8_t EEP_OUT_PRG_CE = 13;    // PC7
+constexpr uint8_t EEP_OPEN_DRAIN_WE = 12; // PD6: open-drain
+
 
 /******************************************
   FC
@@ -141,6 +145,47 @@ void writeByte(uint8_t OUT_CS, uint8_t OUT_WE, uint8_t data) {
 
     digitalWrite(OUT_WE, HIGH);
 }
+void writeEEP(uint8_t OUT_CE, uint16_t addr, uint8_t buf[], uint16_t length) {
+    // I/O pins: output
+    DDRD |= 0x0f;
+    DDRF |= 0xf0;
+
+    digitalWrite(OUT_CE, LOW); // enable chip
+    clearA00A07();
+    for (uint16_t currByte = 0; currByte < length; currByte += 64) {
+        for (uint16_t i = 0; i < 64; i++) {
+            uint8_t data = buf[currByte + i];
+
+            noInterrupts();
+            nextA00A07(currByte + i);
+            setA08A14(addr + currByte + i);
+
+            pinMode(EEP_OPEN_DRAIN_WE, OUTPUT); // enable write
+
+            // write
+            PORTD = (PORTD & 0xf0) | (data & 0x0f);
+            PORTF = (PORTF & 0x0f) | (data & 0xf0);
+            __asm__(
+                "nop\n\t"
+                "nop\n\t"
+            );
+
+            pinMode(EEP_OPEN_DRAIN_WE, INPUT);
+            __asm__(
+                "nop\n\t"
+                "nop\n\t"
+            );
+
+            interrupts();
+        }
+        delay(5); // [msec]
+    }
+    digitalWrite(OUT_CE, HIGH);
+
+    // I/O pins: input
+    DDRD &= ~0x0f;
+    DDRF &= ~0xf0;
+}
 
 
 /******************************************
@@ -157,6 +202,9 @@ void writeByte(uint8_t OUT_CS, uint8_t OUT_WE, uint8_t data) {
 #define REQ_CPU_WRITE_FLASH 5
 #define REQ_PPU_READ        6
 #define REQ_PPU_WRITE       7
+
+#define REQ_CPU_WRITE_EEP  16
+#define REQ_PPU_WRITE_EEP  17
 
 // index
 #define INDEX_IMPLIED 0
@@ -210,6 +258,11 @@ void setup() {
     //pinMode(OUT_PPU_WR, OUTPUT);
     pinMode(OUT_PPU_RD, OUTPUT);
 
+    pinMode(EEP_OUT_PRG_CE, OUTPUT);
+    digitalWrite(EEP_OUT_PRG_CE, HIGH);
+    digitalWrite(EEP_OPEN_DRAIN_WE, LOW); // open-drain
+    pinMode(EEP_OPEN_DRAIN_WE, INPUT);
+
     clearA00A07();
     setA08A14(0);
 
@@ -262,10 +315,12 @@ void loop() {
     if (msg.request == REQ_CPU_READ) {
         // addr: 0b1xxx_xxxx... 32KB full
         addr = PRG_BASE | addr;
+        digitalWrite(EEP_OUT_PRG_CE, LOW);
         if (msg.length <= PACKET_SIZE) {
             readBytes(OUT_ROMSEL, addr, readbuf, msg.length);
             Serial.write(readbuf, msg.length);
         }
+        digitalWrite(EEP_OUT_PRG_CE, HIGH);
         return;
     }
     if (msg.request == REQ_CPU_WRITE_6502) {
@@ -283,12 +338,32 @@ void loop() {
     if (msg.request == REQ_PPU_READ) {
         // addr: 0b000x_xxxx... 8KB full
         addr &= 0x1fff;
-        digitalWrite(OUT_PPU_RD, LOW);
+        digitalWrite(OUT_PPU_A13, LOW);
         if (msg.length <= PACKET_SIZE) {
-            readBytes(OUT_PPU_A13, addr, readbuf, msg.length);
+            readBytes(OUT_PPU_RD, addr, readbuf, msg.length);
             Serial.write(readbuf, msg.length);
         }
-        digitalWrite(OUT_PPU_RD, HIGH);
+        digitalWrite(OUT_PPU_A13, HIGH);
+        return;
+    }
+
+    // EEPROM
+    if (msg.request == REQ_CPU_WRITE_EEP) {
+        // addr: 0b1xxx_xxxx... 32KB full
+        addr = PRG_BASE | addr;
+        if (msg.length <= PACKET_SIZE) {
+            Serial.readBytes(readbuf, msg.length);
+            writeEEP(EEP_OUT_PRG_CE, addr, readbuf, msg.length);
+        }
+        return;
+    }
+    if (msg.request == REQ_PPU_WRITE_EEP) {
+        // addr: 0b000x_xxxx... 8KB full
+        addr &= 0x1fff;
+        if (msg.length <= PACKET_SIZE) {
+            Serial.readBytes(readbuf, msg.length);
+            writeEEP(OUT_PPU_A13, addr, readbuf, msg.length);
+        }
         return;
     }
 }
