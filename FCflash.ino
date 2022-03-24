@@ -315,12 +315,10 @@ void loop() {
     if (msg.request == REQ_CPU_READ) {
         // addr: 0b1xxx_xxxx... 32KB full
         addr = PRG_BASE | addr;
-        digitalWrite(EEP_OUT_PRG_CE, LOW);
         if (msg.length <= PACKET_SIZE) {
             readBytes(OUT_ROMSEL, addr, readbuf, msg.length);
             Serial.write(readbuf, msg.length);
         }
-        digitalWrite(EEP_OUT_PRG_CE, HIGH);
         return;
     }
     if (msg.request == REQ_CPU_WRITE_6502) {
