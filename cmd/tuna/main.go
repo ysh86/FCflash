@@ -102,7 +102,7 @@ func main() {
 		}
 
 		// PRG
-		for i := 0; i < 32*1024; i += PACKET_SIZE {
+		for i := 0; i < 16*1024*prg; i += PACKET_SIZE {
 			buf[0] = 0 // _reserverd
 			buf[1] = uint8(REQ_CPU_WRITE_EEP)
 			binary.LittleEndian.PutUint16(buf[2:4], 0x8000|uint16(i))      // Value
@@ -123,8 +123,10 @@ func main() {
 				panic(err)
 			}
 		}
+		fmt.Println("done PRG")
+
 		// CHR
-		for i := 0; i < 8*1024; i += PACKET_SIZE {
+		for i := 0; i < 8*1024*chr; i += PACKET_SIZE {
 			buf[0] = 0 // _reserverd
 			buf[1] = uint8(REQ_PPU_WRITE_EEP)
 			binary.LittleEndian.PutUint16(buf[2:4], uint16(i))             // Value
@@ -145,6 +147,7 @@ func main() {
 				panic(err)
 			}
 		}
+		fmt.Println("done CHR")
 
 		return
 	}

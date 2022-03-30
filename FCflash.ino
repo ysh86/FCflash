@@ -12,7 +12,7 @@
 *****************************************/
 
 // PRG/CHR
-constexpr uint8_t OUT_A00_07_CLR = 22; // PF1: All LOW:1
+constexpr uint8_t OUT_A01_07_CLR = 22; // PF1: All LOW:1
 constexpr uint8_t OUT_A00 = 23;        // PF0: next:neg edge
 
 constexpr uint8_t OUT_A08 = 17;        // PB0:
@@ -42,8 +42,8 @@ constexpr uint8_t OUT_CPU_RW = 6;      // PD7: Read:1, Write:0
 // TODO: OUT_PPU_WR = 13;              // PC7: N.C.
 constexpr uint8_t OUT_PPU_RD = 5;      // PC6:
 
-#define ROMSEL(__b__) (PORTB = PORTB&0b01111111|(__b__<<7))
-#define PHI2(__b__) (PORTE = PORTE&0b10111111|(__b__<<6))
+#define ROMSEL(__b__) (PORTB = (PORTB&0b01111111)|((__b__)<<7))
+#define PHI2(__b__) (PORTE = (PORTE&0b10111111)|((__b__)<<6))
 
 // EEPROM
 constexpr uint8_t EEP_OUT_PRG_CE = 13;    // PC7
@@ -57,14 +57,14 @@ constexpr uint8_t EEP_OPEN_DRAIN_WE = 12; // PD6: open-drain
 void clearA00A07()
 {
     digitalWrite(OUT_A00, LOW);
-    digitalWrite(OUT_A00_07_CLR, HIGH);
+    digitalWrite(OUT_A01_07_CLR, HIGH);
     __asm__(
         "nop\n\t"
         "nop\n\t"
         "nop\n\t"
         "nop\n\t"
     );
-    digitalWrite(OUT_A00_07_CLR, LOW);
+    digitalWrite(OUT_A01_07_CLR, LOW);
     __asm__(
         "nop\n\t"
         "nop\n\t"
@@ -72,7 +72,7 @@ void clearA00A07()
         "nop\n\t"
     );
 }
-void nextA00A07(uint8_t lo_addr)
+void nextA00A07(uint16_t lo_addr)
 {
     PORTF = (PORTF & 0b11111110) | (lo_addr&1);
 }
@@ -86,15 +86,15 @@ void setA08A14(uint16_t hi_addr)
 }
 
 // Read one byte out of the cartridge
-uint8_t readByte(uint8_t OUT_CS) {
+uint8_t readByte(uint8_t OUT_OE) {
     // already disabled all chips (PRG, W-RAM & CHR)
-    if (OUT_CS == OUT_ROMSEL) {
+    if (OUT_OE == OUT_ROMSEL) {
         // PRG
         ROMSEL(0); // select chip
         PHI2(1);   // enable read & set addr
     } else {
         // CHR
-        digitalWrite(OUT_CS, LOW); // enable chip
+        digitalWrite(OUT_OE, LOW); // enable read
     }
     __asm__(
         "nop\n\t"
@@ -105,13 +105,13 @@ uint8_t readByte(uint8_t OUT_CS) {
     // read
     uint8_t temp = (PINF & 0xf0) | (PIND & 0x0f);
 
-    if (OUT_CS == OUT_ROMSEL) {
+    if (OUT_OE == OUT_ROMSEL) {
         // PRG
         PHI2(0);
         ROMSEL(1);
     } else {
         // CHR
-        digitalWrite(OUT_CS, HIGH);
+        digitalWrite(OUT_OE, HIGH);
     }
     __asm__(
         "nop\n\t"
@@ -182,8 +182,10 @@ void writeEEP(uint8_t OUT_CE, uint16_t addr, uint8_t buf[], uint16_t length) {
     }
     digitalWrite(OUT_CE, HIGH);
 
-    // I/O pins: input
+    // I/O pins: input/pull-up
+    PORTD |= 0x0f;
     DDRD &= ~0x0f;
+    PORTF |= 0xf0;
     DDRF &= ~0xf0;
 }
 
@@ -240,7 +242,7 @@ void setup() {
     DDRF &= ~0b11110011; // input: F0,1,4-7
 
     // Pins
-    pinMode(OUT_A00_07_CLR, OUTPUT);
+    pinMode(OUT_A01_07_CLR, OUTPUT);
     pinMode(OUT_A00, OUTPUT);
 
     pinMode(OUT_A08, OUTPUT);
@@ -292,13 +294,13 @@ static uint8_t readbuf[PACKET_SIZE];
   main
 *****************************************/
 
-void readBytes(uint8_t OUT_CS, uint16_t addr, uint8_t buf[], uint16_t length) {
+void readBytes(uint8_t OUT_OE, uint16_t addr, uint8_t buf[], uint16_t length) {
     clearA00A07();
     for (uint16_t currByte = 0; currByte < length; currByte++) {
         noInterrupts();
         nextA00A07(currByte);
         setA08A14(addr + currByte);
-        buf[currByte] = readByte(OUT_CS);
+        buf[currByte] = readByte(OUT_OE);
         interrupts();
     }
 }
