@@ -49,6 +49,17 @@ constexpr uint8_t OUT_PPU_RD = 5;      // PC6:
 constexpr uint8_t EEP_OUT_PRG_CE = 13;    // PC7
 constexpr uint8_t EEP_OPEN_DRAIN_WE = 12; // PD6: open-drain
 
+// Raw
+constexpr uint8_t RAW_OUT_OE = 13; // PC7
+//constexpr uint8_t RAW_OUT_OE = 5;  // Mask ROM
+constexpr uint8_t RAW_OUT_WE = 12; // PD6
+constexpr uint8_t RAW_OUT_CE = 11; // shared with ROMSEL
+constexpr uint8_t RAW_OUT_A15 = 4; // shared with PPU_A13
+constexpr uint8_t RAW_OUT_A16 = 5; // shared with PPU_RD
+//constexpr uint8_t RAW_OUT_A16 = 13;// Mask ROM
+constexpr uint8_t RAW_OUT_A17 = 6; // shared with CPU_RW (swapped addr)
+constexpr uint8_t RAW_OUT_A18 = 7; // shared with PHI2   (swapped addr)
+
 
 /******************************************
   FC
@@ -84,6 +95,14 @@ void setA08A14(uint16_t hi_addr)
         "nop\n\t"
     );
 }
+void setA15A18(uint32_t addr)
+{
+    uint8_t nibb = (addr >> 15) & 0x0f;
+    digitalWrite(RAW_OUT_A15, nibb&1);
+    digitalWrite(RAW_OUT_A16, (nibb>>1)&1);
+    digitalWrite(RAW_OUT_A17, (nibb>>2)&1);
+    digitalWrite(RAW_OUT_A18, (nibb>>3)&1);
+}
 
 // Read one byte out of the cartridge
 uint8_t readByte(uint8_t OUT_OE) {
@@ -93,7 +112,7 @@ uint8_t readByte(uint8_t OUT_OE) {
         ROMSEL(0); // select chip
         PHI2(1);   // enable read & set addr
     } else {
-        // CHR
+        // CHR, RAW
         digitalWrite(OUT_OE, LOW); // enable read
     }
     __asm__(
@@ -110,7 +129,7 @@ uint8_t readByte(uint8_t OUT_OE) {
         PHI2(0);
         ROMSEL(1);
     } else {
-        // CHR
+        // CHR, RAW
         digitalWrite(OUT_OE, HIGH);
     }
     __asm__(
@@ -208,6 +227,9 @@ void writeEEP(uint8_t OUT_CE, uint16_t addr, uint8_t buf[], uint16_t length) {
 #define REQ_CPU_WRITE_EEP  16
 #define REQ_PPU_WRITE_EEP  17
 
+#define REQ_RAW_READ         32
+#define REQ_RAW_WRITE_FLASH  33
+
 // index
 #define INDEX_IMPLIED 0
 #define INDEX_CPU     1
@@ -287,6 +309,9 @@ void setup() {
 }
 
 #define PRG_BASE 0x8000
+#define SET_RAW_FLAG(__addr__) ((__addr__)|0x80000000)
+#define IS_RAW_ADDR(__addr__) ((__addr__)&0x80000000)
+
 static uint8_t readbuf[PACKET_SIZE];
 
 
@@ -294,12 +319,15 @@ static uint8_t readbuf[PACKET_SIZE];
   main
 *****************************************/
 
-void readBytes(uint8_t OUT_OE, uint16_t addr, uint8_t buf[], uint16_t length) {
+void readBytes(uint8_t OUT_OE, uint32_t addr24, uint8_t buf[], uint16_t length) {
     clearA00A07();
+    if (IS_RAW_ADDR(addr24)) {
+        setA15A18(addr24);
+    }
     for (uint16_t currByte = 0; currByte < length; currByte++) {
         noInterrupts();
-        nextA00A07(currByte);
-        setA08A14(addr + currByte);
+        nextA00A07(currByte&1);
+        setA08A14((addr24 + currByte)&0x7fff);
         buf[currByte] = readByte(OUT_OE);
         interrupts();
     }
@@ -364,6 +392,23 @@ void loop() {
             Serial.readBytes(readbuf, msg.length);
             writeEEP(OUT_PPU_A13, addr, readbuf, msg.length);
         }
+        return;
+    }
+
+    // RAW
+    if (msg.request == REQ_RAW_READ) {
+        // addr24: 16bit + zero 8bit = 16MB
+        uint32_t addr24 = SET_RAW_FLAG((uint32_t)addr << 8);
+        pinMode(RAW_OUT_WE, OUTPUT);
+        digitalWrite(RAW_OUT_WE, HIGH);
+        digitalWrite(RAW_OUT_CE, LOW);
+        if (msg.length <= PACKET_SIZE) {
+            readBytes(RAW_OUT_OE, addr24, readbuf, msg.length);
+            Serial.write(readbuf, msg.length);
+        }
+        digitalWrite(RAW_OUT_CE, HIGH);
+        digitalWrite(RAW_OUT_WE, LOW);
+        pinMode(RAW_OUT_WE, INPUT);
         return;
     }
 }
