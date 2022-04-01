@@ -30,7 +30,9 @@ const (
 	REQ_CPU_WRITE_EEP = 16
 	REQ_PPU_WRITE_EEP = 17
 
-	REQ_RAW_READ = 32
+	REQ_RAW_READ        = 32
+	REQ_RAW_ERASE_FLASH = 33
+	REQ_RAW_WRITE_FLASH = 34
 )
 
 type Index uint16
@@ -61,6 +63,7 @@ func main() {
 		mirror   int
 		raw      bool
 		eeprom   bool
+		flash    bool
 		fileName string
 	)
 	flag.IntVar(&com, "com", 5, "com port")
@@ -71,6 +74,7 @@ func main() {
 	flag.IntVar(&mirror, "mirror", 0, "0:H, 1:V, 2:battery-backed PRG RAM")
 	flag.BoolVar(&raw, "raw", false, "raw access to ROM/RAM/EEPROM/Flash ICs")
 	flag.BoolVar(&eeprom, "eeprom", false, "write NROM EEPROM")
+	flag.BoolVar(&flash, "flash", false, "write Flash")
 	flag.Parse()
 	args := flag.Args()
 	if len(args) < 1 {
@@ -98,6 +102,18 @@ func main() {
 			panic(err)
 		}
 		fmt.Println("done EEPROM")
+		return
+	}
+
+	// Flash
+	if flash {
+		fmt.Printf("start Flash: prg:%d, chr:%d\n", prg, chr)
+		size := prg*16*1024 + chr*8*1024
+		err := writeFlash(s, fileName, size, buf)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println("done Flash")
 		return
 	}
 
