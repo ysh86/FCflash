@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/binary"
 	"errors"
 	"flag"
 	"fmt"
@@ -30,6 +29,10 @@ const (
 
 	REQ_CPU_WRITE_EEP = 16
 	REQ_PPU_WRITE_EEP = 17
+
+	REQ_RAW_READ        = 32
+	REQ_RAW_ERASE_FLASH = 33
+	REQ_RAW_WRITE_FLASH = 34
 )
 
 type Index uint16
@@ -58,7 +61,9 @@ func main() {
 		prg      int
 		chr      int
 		mirror   int
+		raw      bool
 		eeprom   bool
+		flash    bool
 		fileName string
 	)
 	flag.IntVar(&com, "com", 5, "com port")
@@ -67,7 +72,9 @@ func main() {
 	flag.IntVar(&prg, "prg", 32, "Size of PRG ROM in 16KB units")
 	flag.IntVar(&chr, "chr", 32, "Size of CHR ROM in 8KB units (Value 0 means the board uses CHR RAM)")
 	flag.IntVar(&mirror, "mirror", 0, "0:H, 1:V, 2:battery-backed PRG RAM")
+	flag.BoolVar(&raw, "raw", false, "raw access to ROM/RAM/EEPROM/Flash ICs")
 	flag.BoolVar(&eeprom, "eeprom", false, "write NROM EEPROM")
+	flag.BoolVar(&flash, "flash", false, "write Flash")
 	flag.Parse()
 	args := flag.Args()
 	if len(args) < 1 {
@@ -89,66 +96,24 @@ func main() {
 
 	// EEPROM
 	if eeprom {
-		f, err := os.Open(fileName)
+		fmt.Printf("start EEPROM: prg:%d, chr:%d\n", prg, chr)
+		err := writeEEPROM(s, fileName, prg, chr, buf)
 		if err != nil {
 			panic(err)
 		}
-		defer f.Close()
+		fmt.Println("done EEPROM")
+		return
+	}
 
-		// skip header
-		_, err = f.Seek(16, io.SeekStart)
+	// Flash
+	if flash {
+		fmt.Printf("start Flash: prg:%d, chr:%d\n", prg, chr)
+		size := prg*16*1024 + chr*8*1024
+		err := writeFlash(s, fileName, size, buf)
 		if err != nil {
 			panic(err)
 		}
-
-		// PRG
-		for i := 0; i < 16*1024*prg; i += PACKET_SIZE {
-			buf[0] = 0 // _reserverd
-			buf[1] = uint8(REQ_CPU_WRITE_EEP)
-			binary.LittleEndian.PutUint16(buf[2:4], 0x8000|uint16(i))      // Value
-			binary.LittleEndian.PutUint16(buf[4:6], uint16(INDEX_IMPLIED)) // index
-			binary.LittleEndian.PutUint16(buf[6:8], PACKET_SIZE)           // Length
-			_, err = s.Write(buf[0:8])
-			if err != nil {
-				panic(err)
-			}
-
-			_, err = io.ReadFull(f, buf)
-			if err != nil {
-				panic(err)
-			}
-
-			_, err = s.Write(buf)
-			if err != nil {
-				panic(err)
-			}
-		}
-		fmt.Println("done PRG")
-
-		// CHR
-		for i := 0; i < 8*1024*chr; i += PACKET_SIZE {
-			buf[0] = 0 // _reserverd
-			buf[1] = uint8(REQ_PPU_WRITE_EEP)
-			binary.LittleEndian.PutUint16(buf[2:4], uint16(i))             // Value
-			binary.LittleEndian.PutUint16(buf[4:6], uint16(INDEX_IMPLIED)) // index
-			binary.LittleEndian.PutUint16(buf[6:8], PACKET_SIZE)           // Length
-			_, err = s.Write(buf[0:8])
-			if err != nil {
-				panic(err)
-			}
-
-			_, err = io.ReadFull(f, buf)
-			if err != nil {
-				panic(err)
-			}
-
-			_, err = s.Write(buf)
-			if err != nil {
-				panic(err)
-			}
-		}
-		fmt.Println("done CHR")
-
+		fmt.Println("done Flash")
 		return
 	}
 
@@ -195,6 +160,17 @@ func main() {
 	fmt.Println("----")
 	fmt.Println("ready?")
 	io.ReadAtLeast(os.Stdin, buf[0:1], 1)
+
+	// raw mode
+	if raw {
+		size := prg*16*1024 + chr*8*1024
+		err = dumpRAW(f, s, size, buf)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println("done RAW")
+		return
+	}
 
 	// PRG
 	if mapper == 0 {
