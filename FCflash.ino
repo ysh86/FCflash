@@ -197,7 +197,7 @@ void writeEEP(uint8_t OUT_CE, uint16_t addr, uint8_t buf[], uint16_t length) {
 
             interrupts();
         }
-        delay(5); // [msec]
+        delay(7); // [msec]
     }
     digitalWrite(OUT_CE, HIGH);
 
@@ -207,6 +207,152 @@ void writeEEP(uint8_t OUT_CE, uint16_t addr, uint8_t buf[], uint16_t length) {
     PORTF |= 0xf0;
     DDRF &= ~0xf0;
 }
+
+// Raw
+void writeRawEEP(uint8_t OUT_CE, uint16_t addr, uint8_t buf[], uint16_t length) {
+    writeRawEEP0(OUT_CE, addr, buf, length);
+    //writeRawEEP1(OUT_CE, addr, buf, length);
+}
+void writeRawEEP0(uint8_t OUT_CE, uint16_t addr, uint8_t buf[], uint16_t length) {
+    // I/O pins: output
+    DDRD |= 0x0f;
+    DDRF |= 0xf0;
+
+#if 0
+    // NROM cart
+    digitalWrite(OUT_CE, LOW); // enable chip
+#else
+    // Raw
+    digitalWrite(RAW_OUT_CE, LOW); // enable chip
+#endif
+    clearA00A07();
+    for (uint16_t currByte = 0; currByte < length; currByte += 64) {
+        for (uint16_t i = 0; i < 64; i++) {
+            uint8_t data = buf[currByte + i];
+
+            noInterrupts();
+            nextA00A07(currByte + i);
+            setA08A14(addr + currByte + i);
+
+#if 0
+            // NROM cart
+            pinMode(EEP_OPEN_DRAIN_WE, OUTPUT); // enable write
+#else
+            // Raw
+            digitalWrite(EEP_OPEN_DRAIN_WE, LOW); // enable write
+            pinMode(EEP_OPEN_DRAIN_WE, OUTPUT);
+#endif
+
+            // write
+            PORTD = (PORTD & 0xf0) | (data & 0x0f);
+            PORTF = (PORTF & 0x0f) | (data & 0xf0);
+            __asm__(
+                "nop\n\t"
+                "nop\n\t"
+            );
+
+#if 0
+            // NROM cart
+            pinMode(EEP_OPEN_DRAIN_WE, INPUT);
+#else
+            // Raw
+            digitalWrite(EEP_OPEN_DRAIN_WE, HIGH);
+#endif
+            __asm__(
+                "nop\n\t"
+                "nop\n\t"
+            );
+
+            interrupts();
+        }
+        delay(7); // [msec]
+    }
+#if 0
+    // NROM cart
+    digitalWrite(OUT_CE, HIGH);
+#else
+    // Raw
+    digitalWrite(RAW_OUT_CE, HIGH);
+#endif
+
+    // I/O pins: input/pull-up
+    PORTD |= 0x0f;
+    DDRD &= ~0x0f;
+    PORTF |= 0xf0;
+    DDRF &= ~0xf0;
+}
+void writeRawEEP1(uint8_t OUT_CE, uint16_t addr, uint8_t buf[], uint16_t length) {
+    // I/O pins: output
+    DDRD |= 0x0f;
+    DDRF |= 0xf0;
+
+#if 0
+    // NROM cart
+    digitalWrite(OUT_CE, LOW); // enable chip
+#else
+    // Raw
+    digitalWrite(RAW_OUT_CE, LOW); // enable chip
+#endif
+    clearA00A07();
+    for (uint16_t a = 1; a <= 64; a++) {
+        nextA00A07(a);
+    }
+    for (uint16_t currByte = 64; currByte < length; currByte += 64) {
+        for (uint16_t i = 0; i < 64; i++) {
+            uint8_t data = buf[currByte + i];
+
+            noInterrupts();
+            nextA00A07(currByte + i);
+            setA08A14(addr + currByte + i);
+
+#if 0
+            // NROM cart
+            pinMode(EEP_OPEN_DRAIN_WE, OUTPUT); // enable write
+#else
+            // Raw
+            digitalWrite(EEP_OPEN_DRAIN_WE, LOW); // enable write
+            pinMode(EEP_OPEN_DRAIN_WE, OUTPUT);
+#endif
+
+            // write
+            PORTD = (PORTD & 0xf0) | (data & 0x0f);
+            PORTF = (PORTF & 0x0f) | (data & 0xf0);
+            __asm__(
+                "nop\n\t"
+                "nop\n\t"
+            );
+
+#if 0
+            // NROM cart
+            pinMode(EEP_OPEN_DRAIN_WE, INPUT);
+#else
+            // Raw
+            digitalWrite(EEP_OPEN_DRAIN_WE, HIGH);
+#endif
+            __asm__(
+                "nop\n\t"
+                "nop\n\t"
+            );
+
+            interrupts();
+        }
+        delay(7); // [msec]
+    }
+#if 0
+    // NROM cart
+    digitalWrite(OUT_CE, HIGH);
+#else
+    // Raw
+    digitalWrite(RAW_OUT_CE, HIGH);
+#endif
+
+    // I/O pins: input/pull-up
+    PORTD |= 0x0f;
+    DDRD &= ~0x0f;
+    PORTF |= 0xf0;
+    DDRF &= ~0xf0;
+}
+
 void eraseFlash(uint8_t OUT_WE, uint8_t addr7) {
     // I/O pins: output
     DDRD |= 0x0f;
@@ -229,10 +375,12 @@ void eraseFlash(uint8_t OUT_WE, uint8_t addr7) {
         PORTF = (PORTF & 0x0f) | (data & 0xf0);
         __asm__(
             "nop\n\t"
+            //"nop\n\t" // EEPROM
         );
         digitalWrite(OUT_WE, HIGH);
         __asm__(
             "nop\n\t"
+            //"nop\n\t" // EEPROM
         );
 
         // 2AAAH, 55H
@@ -247,10 +395,12 @@ void eraseFlash(uint8_t OUT_WE, uint8_t addr7) {
         PORTF = (PORTF & 0x0f) | (data & 0xf0);
         __asm__(
             "nop\n\t"
+            //"nop\n\t" // EEPROM
         );
         digitalWrite(OUT_WE, HIGH);
         __asm__(
             "nop\n\t"
+            //"nop\n\t" // EEPROM
         );
 
         // 5555H, 80H
@@ -265,10 +415,12 @@ void eraseFlash(uint8_t OUT_WE, uint8_t addr7) {
         PORTF = (PORTF & 0x0f) | (data & 0xf0);
         __asm__(
             "nop\n\t"
+            //"nop\n\t" // EEPROM
         );
         digitalWrite(OUT_WE, HIGH);
         __asm__(
             "nop\n\t"
+            //"nop\n\t" // EEPROM
         );
 
         // 5555H, AAH
@@ -283,10 +435,12 @@ void eraseFlash(uint8_t OUT_WE, uint8_t addr7) {
         PORTF = (PORTF & 0x0f) | (data & 0xf0);
         __asm__(
             "nop\n\t"
+            //"nop\n\t" // EEPROM
         );
         digitalWrite(OUT_WE, HIGH);
         __asm__(
             "nop\n\t"
+            //"nop\n\t" // EEPROM
         );
 
         // 2AAAH, 55H
@@ -301,10 +455,12 @@ void eraseFlash(uint8_t OUT_WE, uint8_t addr7) {
         PORTF = (PORTF & 0x0f) | (data & 0xf0);
         __asm__(
             "nop\n\t"
+            //"nop\n\t" // EEPROM
         );
         digitalWrite(OUT_WE, HIGH);
         __asm__(
             "nop\n\t"
+            //"nop\n\t" // EEPROM
         );
 
 #if 1
@@ -314,7 +470,8 @@ void eraseFlash(uint8_t OUT_WE, uint8_t addr7) {
             nextA00A07(a);
         }
         setA08A14(0x5500);
-        data = 0x10;
+        data = 0x10; // Flash
+        //data = 0x20; // EEPROM
 #else
         // TODO:
         // Sector-Erase: sector(A18-12), 30H
@@ -329,10 +486,12 @@ void eraseFlash(uint8_t OUT_WE, uint8_t addr7) {
         PORTF = (PORTF & 0x0f) | (data & 0xf0);
         __asm__(
             "nop\n\t"
+            //"nop\n\t" // EEPROM
         );
         digitalWrite(OUT_WE, HIGH);
         __asm__(
             "nop\n\t"
+            //"nop\n\t" // EEPROM
         );
 
         interrupts();
