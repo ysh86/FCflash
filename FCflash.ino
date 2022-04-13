@@ -630,6 +630,8 @@ void writeFlash(uint8_t OUT_WE, uint32_t addr24, uint8_t buf[], uint16_t length)
 #define REQ_RAW_ERASE_FLASH 33
 #define REQ_RAW_WRITE_FLASH 34
 
+#define REQ_CPU_WRITE_5BITS_6502 35
+
 // index
 #define INDEX_IMPLIED 0
 #define INDEX_CPU     1
@@ -760,6 +762,28 @@ void loop() {
         nextA00A07(addr&1);
         setA08A14(addr);
         writeByte(OUT_ROMSEL, OUT_CPU_RW, data);
+        interrupts();
+        return;
+    }
+    if (msg.request == REQ_CPU_WRITE_5BITS_6502) {
+        // addr: 0x8000-0xffff full
+        addr = PRG_BASE | addr;
+        uint8_t five = msg.length & 0x1f;
+        clearA00A07();
+        noInterrupts();
+        nextA00A07(addr&1);
+        setA08A14(addr);
+        // phi2 pulse(L->H->L) is neccessary for MMC1.
+        PHI2(1);
+        __asm__(
+            "nop\n\t"
+            "nop\n\t"
+        );
+        PHI2(0);
+        for (int i = 0; i < 5; i++) {
+            writeByte(OUT_ROMSEL, OUT_CPU_RW, five&1);
+            five >>= 1;
+        }
         interrupts();
         return;
     }

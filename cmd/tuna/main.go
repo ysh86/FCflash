@@ -33,6 +33,8 @@ const (
 	REQ_RAW_READ        = 32
 	REQ_RAW_ERASE_FLASH = 33
 	REQ_RAW_WRITE_FLASH = 34
+
+	REQ_CPU_WRITE_5BITS_6502 = 35
 )
 
 type Index uint16
@@ -68,10 +70,10 @@ func main() {
 	)
 	flag.IntVar(&com, "com", 5, "com port")
 	flag.IntVar(&baud, "baud", 115200, "baud rate")
-	flag.IntVar(&mapper, "mapper", 4, "mapper 0:NROM, 4:TxROM")
-	flag.IntVar(&prg, "prg", 32, "Size of PRG ROM in 16KB units")
-	flag.IntVar(&chr, "chr", 32, "Size of CHR ROM in 8KB units (Value 0 means the board uses CHR RAM)")
-	flag.IntVar(&mirror, "mirror", 0, "0:H, 1:V, 2:battery-backed PRG RAM")
+	flag.IntVar(&mapper, "mapper", 1, "mapper 0:NROM, 1:SxROM, 4:TxROM")
+	flag.IntVar(&prg, "prg", 16, "Size of PRG ROM in 16KB units")
+	flag.IntVar(&chr, "chr", 0, "Size of CHR ROM in 8KB units (Value 0 means the board uses CHR RAM)")
+	flag.IntVar(&mirror, "mirror", 2, "0:H, 1:V, 2:battery-backed PRG RAM")
 	flag.BoolVar(&raw, "raw", false, "raw access to ROM/RAM/EEPROM/Flash ICs")
 	flag.BoolVar(&eeprom, "eeprom", false, "write NROM EEPROM")
 	flag.BoolVar(&flash, "flash", false, "write Flash")
@@ -96,24 +98,30 @@ func main() {
 
 	// EEPROM
 	if eeprom {
-		fmt.Printf("start EEPROM: prg:%d, chr:%d\n", prg, chr)
+		fmt.Printf("write NROM EEPROM: prg:%d, chr:%d\n", prg, chr)
+		fmt.Println("----")
+		fmt.Println("ready?")
+		io.ReadAtLeast(os.Stdin, buf[0:1], 1)
 		err := writeEEPROM(s, fileName, prg, chr, buf)
 		if err != nil {
 			panic(err)
 		}
-		fmt.Println("done EEPROM")
+		fmt.Println("done NROM EEPROM")
 		return
 	}
 
 	// Flash
 	if flash {
-		fmt.Printf("start Flash: prg:%d, chr:%d\n", prg, chr)
+		fmt.Printf("write RAW Flash: prg:%d, chr:%d\n", prg, chr)
+		fmt.Println("----")
+		fmt.Println("ready?")
+		io.ReadAtLeast(os.Stdin, buf[0:1], 1)
 		size := prg*16*1024 + chr*8*1024
 		err := writeFlash(s, fileName, size, buf)
 		if err != nil {
 			panic(err)
 		}
-		fmt.Println("done Flash")
+		fmt.Println("done RAW Flash")
 		return
 	}
 
@@ -163,34 +171,49 @@ func main() {
 
 	// raw mode
 	if raw {
+		fmt.Print("RAW: . . .")
 		size := prg*16*1024 + chr*8*1024
 		err = dumpRAW(f, s, size, buf)
 		if err != nil {
 			panic(err)
 		}
-		fmt.Println("done RAW")
+		fmt.Println(" done")
 		return
 	}
 
 	// PRG
-	if mapper == 0 {
-		err = dumpNromPRG(f, s, prg, buf)
+	if prg != 0 {
+		fmt.Print("PRG: . . .")
+		if mapper == 0 {
+			err = dumpNromPRG(f, s, prg, buf)
+		} else if mapper == 1 {
+			err = dumpSxromPRG(f, s, prg, buf)
+		} else {
+			err = dumpTxromPRG(f, s, prg, buf)
+		}
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println(" done")
 	} else {
-		err = dumpTxromPRG(f, s, prg, buf)
+		fmt.Println("PRG: skip")
 	}
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("done PRG")
 
 	// CHR
-	if mapper == 0 {
-		err = dumpNromCHR(f, s, chr, buf)
+	if chr != 0 {
+		fmt.Print("CHR: . . .")
+		if mapper == 0 {
+			err = dumpNromCHR(f, s, chr, buf)
+		} else if mapper == 1 {
+			panic(fmt.Errorf("mapper:%d CHR is NOT implemented", mapper))
+		} else {
+			err = dumpTxromCHR(f, s, chr, buf)
+		}
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println(" done")
 	} else {
-		err = dumpTxromCHR(f, s, chr, buf)
+		fmt.Println("CHR: skip")
 	}
-	if err != nil {
-		panic(err)
-	}
-	fmt.Println("done CHR")
 }
