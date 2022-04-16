@@ -774,12 +774,16 @@ void loop() {
         nextA00A07(addr&1);
         setA08A14(addr);
         // phi2 pulse(L->H->L) is neccessary for MMC1.
-        PHI2(1);
-        __asm__(
-            "nop\n\t"
-            "nop\n\t"
-        );
-        PHI2(0);
+        {
+            ROMSEL(0); // select MMC:0 or W-RAM:1
+            PHI2(1);
+            __asm__(
+                "nop\n\t"
+                "nop\n\t"
+            );
+            PHI2(0);
+            ROMSEL(1);
+        }
         for (int i = 0; i < 5; i++) {
             writeByte(OUT_ROMSEL, OUT_CPU_RW, five&1);
             five >>= 1;
