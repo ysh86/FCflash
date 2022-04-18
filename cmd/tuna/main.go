@@ -98,6 +98,13 @@ func main() {
 
 	// EEPROM
 	if eeprom {
+		if raw {
+			// RAW EEPROM
+			panic(errors.New("write RAW EEPROM is NOT implemented"))
+		}
+		if mapper != 0 {
+			panic(fmt.Errorf("write mapper:%d EEPROM is NOT implemented", mapper))
+		}
 		fmt.Printf("write NROM EEPROM: prg:%d, chr:%d\n", prg, chr)
 		fmt.Println("----")
 		fmt.Println("ready?")
@@ -106,22 +113,41 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		fmt.Println("done NROM EEPROM")
+		fmt.Println("done")
 		return
 	}
 
 	// Flash
 	if flash {
-		fmt.Printf("write RAW Flash: prg:%d, chr:%d\n", prg, chr)
+		if raw {
+			fmt.Printf("write RAW Flash: prg:%d, chr:%d\n", prg, chr)
+			fmt.Println("----")
+			fmt.Println("ready?")
+			io.ReadAtLeast(os.Stdin, buf[0:1], 1)
+			size := prg*16*1024 + chr*8*1024
+			err := writeFlash(s, fileName, size, buf)
+			if err != nil {
+				panic(err)
+			}
+			fmt.Println("done")
+			return
+		}
+		// Flash with mapper
+		if mapper != 1 {
+			panic(fmt.Errorf("write mapper:%d Flash is NOT implemented", mapper))
+		}
+		if chr > 0 {
+			panic(errors.New("write CHR Flash is NOT implemented"))
+		}
+		fmt.Printf("write SxROM: prg:%d, chr:%d\n", prg, chr)
 		fmt.Println("----")
 		fmt.Println("ready?")
 		io.ReadAtLeast(os.Stdin, buf[0:1], 1)
-		size := prg*16*1024 + chr*8*1024
-		err := writeFlash(s, fileName, size, buf)
+		err := writeSxromPRG(s, fileName, prg, buf)
 		if err != nil {
 			panic(err)
 		}
-		fmt.Println("done RAW Flash")
+		fmt.Println("done")
 		return
 	}
 
