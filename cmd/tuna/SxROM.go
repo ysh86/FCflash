@@ -156,12 +156,6 @@ func writeSxromPRG(s io.Writer, fileName string, prg int, buf []uint8) (err erro
 	}
 	defer f.Close()
 
-	// skip header
-	_, err = f.Seek(16, io.SeekStart)
-	if err != nil {
-		return err
-	}
-
 	// MMC1: reset
 	resetValue := uint16(0xff)
 	buf[0] = 0 // _reserverd
@@ -231,6 +225,12 @@ func writeSxromPRG(s io.Writer, fileName string, prg int, buf []uint8) (err erro
 			return err
 		}
 
+		// seek
+		_, err = f.Seek(16+16*1024*int64(bank), io.SeekStart)
+		if err != nil {
+			return err
+		}
+
 		for i := 0; i < 0x4000; i += PACKET_SIZE {
 			fmt.Printf(".")
 
@@ -281,6 +281,12 @@ func writeSxromPRG(s io.Writer, fileName string, prg int, buf []uint8) (err erro
 		binary.LittleEndian.PutUint16(buf[4:6], uint16(INDEX_IMPLIED)) // index
 		binary.LittleEndian.PutUint16(buf[6:8], uint16(bank))          // Length
 		_, err = s.Write(buf[0:8])
+		if err != nil {
+			return err
+		}
+
+		// seek
+		_, err = f.Seek(16+256*1024+16*1024*int64(bank), io.SeekStart)
 		if err != nil {
 			return err
 		}
@@ -358,6 +364,12 @@ func writeSxromPRG(s io.Writer, fileName string, prg int, buf []uint8) (err erro
 			return err
 		}
 
+		// seek
+		_, err = f.Seek(16+16*1024*int64(bank), io.SeekStart)
+		if err != nil {
+			return err
+		}
+
 		for i := 0; i < 0x4000; i += PACKET_SIZE {
 			fmt.Printf(".")
 
@@ -408,6 +420,12 @@ func writeSxromPRG(s io.Writer, fileName string, prg int, buf []uint8) (err erro
 		binary.LittleEndian.PutUint16(buf[4:6], uint16(INDEX_IMPLIED)) // index
 		binary.LittleEndian.PutUint16(buf[6:8], uint16(bank))          // Length
 		_, err = s.Write(buf[0:8])
+		if err != nil {
+			return err
+		}
+
+		// seek
+		_, err = f.Seek(16+256*1024+16*1024*int64(bank), io.SeekStart)
 		if err != nil {
 			return err
 		}
