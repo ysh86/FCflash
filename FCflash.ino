@@ -353,7 +353,8 @@ void writeRawEEP1(uint8_t OUT_CE, uint16_t addr, uint8_t buf[], uint16_t length)
     DDRF &= ~0xf0;
 }
 
-void eraseFlash(uint8_t OUT_WE, uint8_t addr7) {
+// addr7: A18-12:7bits => 4[KB/sector] * 128 = max 512KB(4Mbits)
+void eraseFlash(uint8_t OUT_CE, uint8_t addr7) {
     // I/O pins: output
     DDRD |= 0x0f;
     DDRF |= 0xf0;
@@ -370,14 +371,14 @@ void eraseFlash(uint8_t OUT_WE, uint8_t addr7) {
         }
         setA08A14(0x5500);
         data = 0xaa;
-        digitalWrite(OUT_WE, LOW);
+        digitalWrite(OUT_CE, LOW);
         PORTD = (PORTD & 0xf0) | (data & 0x0f);
         PORTF = (PORTF & 0x0f) | (data & 0xf0);
         __asm__(
             "nop\n\t"
             //"nop\n\t" // EEPROM
         );
-        digitalWrite(OUT_WE, HIGH);
+        digitalWrite(OUT_CE, HIGH);
         __asm__(
             "nop\n\t"
             //"nop\n\t" // EEPROM
@@ -390,14 +391,14 @@ void eraseFlash(uint8_t OUT_WE, uint8_t addr7) {
         }
         setA08A14(0x2a00);
         data = 0x55;
-        digitalWrite(OUT_WE, LOW);
+        digitalWrite(OUT_CE, LOW);
         PORTD = (PORTD & 0xf0) | (data & 0x0f);
         PORTF = (PORTF & 0x0f) | (data & 0xf0);
         __asm__(
             "nop\n\t"
             //"nop\n\t" // EEPROM
         );
-        digitalWrite(OUT_WE, HIGH);
+        digitalWrite(OUT_CE, HIGH);
         __asm__(
             "nop\n\t"
             //"nop\n\t" // EEPROM
@@ -410,14 +411,14 @@ void eraseFlash(uint8_t OUT_WE, uint8_t addr7) {
         }
         setA08A14(0x5500);
         data = 0x80;
-        digitalWrite(OUT_WE, LOW);
+        digitalWrite(OUT_CE, LOW);
         PORTD = (PORTD & 0xf0) | (data & 0x0f);
         PORTF = (PORTF & 0x0f) | (data & 0xf0);
         __asm__(
             "nop\n\t"
             //"nop\n\t" // EEPROM
         );
-        digitalWrite(OUT_WE, HIGH);
+        digitalWrite(OUT_CE, HIGH);
         __asm__(
             "nop\n\t"
             //"nop\n\t" // EEPROM
@@ -430,14 +431,14 @@ void eraseFlash(uint8_t OUT_WE, uint8_t addr7) {
         }
         setA08A14(0x5500);
         data = 0xaa;
-        digitalWrite(OUT_WE, LOW);
+        digitalWrite(OUT_CE, LOW);
         PORTD = (PORTD & 0xf0) | (data & 0x0f);
         PORTF = (PORTF & 0x0f) | (data & 0xf0);
         __asm__(
             "nop\n\t"
             //"nop\n\t" // EEPROM
         );
-        digitalWrite(OUT_WE, HIGH);
+        digitalWrite(OUT_CE, HIGH);
         __asm__(
             "nop\n\t"
             //"nop\n\t" // EEPROM
@@ -450,45 +451,43 @@ void eraseFlash(uint8_t OUT_WE, uint8_t addr7) {
         }
         setA08A14(0x2a00);
         data = 0x55;
-        digitalWrite(OUT_WE, LOW);
+        digitalWrite(OUT_CE, LOW);
         PORTD = (PORTD & 0xf0) | (data & 0x0f);
         PORTF = (PORTF & 0x0f) | (data & 0xf0);
         __asm__(
             "nop\n\t"
             //"nop\n\t" // EEPROM
         );
-        digitalWrite(OUT_WE, HIGH);
+        digitalWrite(OUT_CE, HIGH);
         __asm__(
             "nop\n\t"
             //"nop\n\t" // EEPROM
         );
 
-#if 1
-        // Chip-Erase: 5555H, 10H
-        clearA00A07();
-        for (uint16_t a = 1; a <= 0x55; a++) {
-            nextA00A07(a);
+        if (addr7 == 0xff) {
+            // Chip-Erase: 5555H, 10H
+            clearA00A07();
+            for (uint16_t a = 1; a <= 0x55; a++) {
+                nextA00A07(a);
+            }
+            setA08A14(0x5500);
+            data = 0x10; // Flash
+            //data = 0x20; // EEPROM
+        } else {
+            // Sector-Erase: sector(A18-12), 30H
+            uint32_t sector = (uint32_t)addr7 << 12;
+            clearA00A07();
+            setA08A14(sector&0x7fff);
+            data = 0x30;
         }
-        setA08A14(0x5500);
-        data = 0x10; // Flash
-        //data = 0x20; // EEPROM
-#else
-        // TODO:
-        // Sector-Erase: sector(A18-12), 30H
-        uint32_t sector = (uint32_t)addr7 << 12;
-        clearA00A07();
-        setA08A14(sector&0x7fff);
-        setA15A18(sector);
-        data = 0x30;
-#endif
-        digitalWrite(OUT_WE, LOW);
+        digitalWrite(OUT_CE, LOW);
         PORTD = (PORTD & 0xf0) | (data & 0x0f);
         PORTF = (PORTF & 0x0f) | (data & 0xf0);
         __asm__(
             "nop\n\t"
             //"nop\n\t" // EEPROM
         );
-        digitalWrite(OUT_WE, HIGH);
+        digitalWrite(OUT_CE, HIGH);
         __asm__(
             "nop\n\t"
             //"nop\n\t" // EEPROM
@@ -497,14 +496,13 @@ void eraseFlash(uint8_t OUT_WE, uint8_t addr7) {
         interrupts();
     }
 
-#if 1
-    // Chip-Erase
-    delay(100); // [msec]
-#else
-    // TODO:
-    // Sector-Erase
-    delay(25); // [msec]
-#endif
+    if (addr7 == 0xff) {
+        // Chip-Erase
+        delay(100); // [msec]
+    } else {
+        // Sector-Erase
+        delay(25); // [msec]
+    }
 
     // I/O pins: input/pull-up
     PORTD |= 0x0f;
@@ -512,7 +510,12 @@ void eraseFlash(uint8_t OUT_WE, uint8_t addr7) {
     PORTF |= 0xf0;
     DDRF &= ~0xf0;
 }
-void writeFlash(uint8_t OUT_WE, uint32_t addr24, uint8_t buf[], uint16_t length) {
+void writeFlash(uint8_t OUT_CE, uint16_t addr15, uint8_t buf[], uint16_t length) {
+    // erase @ every 4KB
+    if ((addr15 & 0x0fff) == 0) {
+        eraseFlash(OUT_CE, addr15>>12);
+    }
+
     // I/O pins: output
     DDRD |= 0x0f;
     DDRF |= 0xf0;
@@ -528,13 +531,13 @@ void writeFlash(uint8_t OUT_WE, uint32_t addr24, uint8_t buf[], uint16_t length)
         }
         setA08A14(0x5500);
         data = 0xaa;
-        digitalWrite(OUT_WE, LOW);
+        digitalWrite(OUT_CE, LOW);
         PORTD = (PORTD & 0xf0) | (data & 0x0f);
         PORTF = (PORTF & 0x0f) | (data & 0xf0);
         __asm__(
             "nop\n\t"
         );
-        digitalWrite(OUT_WE, HIGH);
+        digitalWrite(OUT_CE, HIGH);
         __asm__(
             "nop\n\t"
         );
@@ -546,13 +549,13 @@ void writeFlash(uint8_t OUT_WE, uint32_t addr24, uint8_t buf[], uint16_t length)
         }
         setA08A14(0x2a00);
         data = 0x55;
-        digitalWrite(OUT_WE, LOW);
+        digitalWrite(OUT_CE, LOW);
         PORTD = (PORTD & 0xf0) | (data & 0x0f);
         PORTF = (PORTF & 0x0f) | (data & 0xf0);
         __asm__(
             "nop\n\t"
         );
-        digitalWrite(OUT_WE, HIGH);
+        digitalWrite(OUT_CE, HIGH);
         __asm__(
             "nop\n\t"
         );
@@ -564,33 +567,32 @@ void writeFlash(uint8_t OUT_WE, uint32_t addr24, uint8_t buf[], uint16_t length)
         }
         setA08A14(0x5500);
         data = 0xA0;
-        digitalWrite(OUT_WE, LOW);
+        digitalWrite(OUT_CE, LOW);
         PORTD = (PORTD & 0xf0) | (data & 0x0f);
         PORTF = (PORTF & 0x0f) | (data & 0xf0);
         __asm__(
             "nop\n\t"
         );
-        digitalWrite(OUT_WE, HIGH);
+        digitalWrite(OUT_CE, HIGH);
         __asm__(
             "nop\n\t"
         );
 
-        // addr24, Data
-        uint32_t addr = addr24 + currByte;
+        // addr15, Data
+        uint16_t addr = addr15 + currByte;
         clearA00A07();
         for (uint16_t a = 1; a <= (addr&0xff); a++) {
             nextA00A07(a);
         }
         setA08A14(addr&0x7fff);
-        setA15A18(addr);
         data = buf[currByte];
-        digitalWrite(OUT_WE, LOW);
+        digitalWrite(OUT_CE, LOW);
         PORTD = (PORTD & 0xf0) | (data & 0x0f);
         PORTF = (PORTF & 0x0f) | (data & 0xf0);
         __asm__(
             "nop\n\t"
         );
-        digitalWrite(OUT_WE, HIGH);
+        digitalWrite(OUT_CE, HIGH);
         __asm__(
             "nop\n\t"
         );
@@ -629,6 +631,8 @@ void writeFlash(uint8_t OUT_WE, uint32_t addr24, uint8_t buf[], uint16_t length)
 #define REQ_RAW_READ        32
 #define REQ_RAW_ERASE_FLASH 33
 #define REQ_RAW_WRITE_FLASH 34
+
+#define REQ_CPU_WRITE_5BITS_6502 35
 
 // index
 #define INDEX_IMPLIED 0
@@ -708,22 +712,15 @@ void setup() {
     pinMode(IO_D7, INPUT_PULLUP);
 }
 
-#define PRG_BASE 0x8000
-#define SET_RAW_FLAG(__addr__) ((__addr__)|0x80000000)
-#define IS_RAW_ADDR(__addr__) ((__addr__)&0x80000000)
-
-static uint8_t readbuf[PACKET_SIZE];
-
 
 /******************************************
   main
 *****************************************/
+#define PRG_BASE 0x8000
+static uint8_t readbuf[PACKET_SIZE];
 
 void readBytes(uint8_t OUT_OE, uint32_t addr24, uint8_t buf[], uint16_t length) {
     clearA00A07();
-    if (IS_RAW_ADDR(addr24)) {
-        setA15A18(addr24);
-    }
     for (uint16_t currByte = 0; currByte < length; currByte++) {
         noInterrupts();
         nextA00A07(currByte&1);
@@ -763,6 +760,32 @@ void loop() {
         interrupts();
         return;
     }
+    if (msg.request == REQ_CPU_WRITE_5BITS_6502) {
+        // addr: 0x8000-0xffff full
+        addr = PRG_BASE | addr;
+        uint8_t five = msg.length & 0x1f;
+        clearA00A07();
+        noInterrupts();
+        nextA00A07(addr&1);
+        setA08A14(addr);
+        // phi2 pulse(L->H->L) is neccessary for MMC1.
+        {
+            ROMSEL(0); // select MMC:0 or W-RAM:1
+            PHI2(1);
+            __asm__(
+                "nop\n\t"
+                "nop\n\t"
+            );
+            PHI2(0);
+            ROMSEL(1);
+        }
+        for (int i = 0; i < 5; i++) {
+            writeByte(OUT_ROMSEL, OUT_CPU_RW, five&1);
+            five >>= 1;
+        }
+        interrupts();
+        return;
+    }
     if (msg.request == REQ_PPU_READ) {
         // addr: 0b000x_xxxx... 8KB full
         addr &= 0x1fff;
@@ -795,10 +818,25 @@ void loop() {
         return;
     }
 
+    // Flash
+    if (msg.request == REQ_CPU_WRITE_FLASH) {
+        // addr15:
+        //  even banks: 0x0000-0x3fff 16KB
+        //  odd  banks: 0x4000-0x7fff 16KB
+        digitalWrite(OUT_CPU_RW, LOW);
+        if (msg.length <= PACKET_SIZE) {
+            Serial.readBytes(readbuf, msg.length);
+            writeFlash(OUT_ROMSEL, addr, readbuf, msg.length);
+        }
+        digitalWrite(OUT_CPU_RW, HIGH);
+        return;
+    }
+
     // RAW
     if (msg.request == REQ_RAW_READ) {
         // addr24: 16bit + zero 8bit = 16MB
-        uint32_t addr24 = SET_RAW_FLAG((uint32_t)addr << 8);
+        uint32_t addr24 = (uint32_t)addr << 8;
+        setA15A18(addr24);
         pinMode(RAW_OUT_WE, OUTPUT);
         digitalWrite(RAW_OUT_WE, HIGH);
         digitalWrite(RAW_OUT_CE, LOW);
@@ -812,13 +850,11 @@ void loop() {
         return;
     }
     if (msg.request == REQ_RAW_ERASE_FLASH) {
-        // TODO: addr7: A18-12:7bits => 4[KB/sector] * 128
-        uint8_t addr7 = addr & 0x7f;
         pinMode(RAW_OUT_WE, OUTPUT);
         digitalWrite(RAW_OUT_WE, HIGH);
         digitalWrite(RAW_OUT_CE, LOW);
         {
-            eraseFlash(RAW_OUT_WE, addr7);
+            eraseFlash(RAW_OUT_WE, addr/* == 0xff */);
         }
         digitalWrite(RAW_OUT_CE, HIGH);
         digitalWrite(RAW_OUT_WE, LOW);
@@ -828,6 +864,7 @@ void loop() {
     if (msg.request == REQ_RAW_WRITE_FLASH) {
         // addr24: 16bit + zero 8bit = 16MB
         uint32_t addr24 = (uint32_t)addr << 8;
+        setA15A18(addr24);
         pinMode(RAW_OUT_WE, OUTPUT);
         digitalWrite(RAW_OUT_WE, HIGH);
         digitalWrite(RAW_OUT_CE, LOW);
