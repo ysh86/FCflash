@@ -166,9 +166,11 @@ func main() {
 	buf[4] = uint8(prg)
 	buf[5] = uint8(chr)
 	buf[6] = uint8((mapper << 4) | mirror)
-	_, err = f.Write(buf[0:16])
-	if err != nil {
-		panic(err)
+	if !raw {
+		_, err = f.Write(buf[0:16])
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	// info
