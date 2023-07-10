@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"flag"
 	"fmt"
@@ -101,7 +102,18 @@ func parseHeader(buf []byte) (title string, cgb, cartType, romSize, ramSize byte
 	begin := 0x0134
 	header := buf[begin:0x0150]
 
-	title = string(header[0:(0x0143 - begin)])
+	t := header[0:(0x0143 - begin)]
+	ss := make([]byte, len(t))
+	i := 0
+	for _, s := range t {
+		if s == 0 {
+			break
+		}
+		ss[i] = s
+		i += 1
+	}
+
+	title = string(bytes.TrimSpace(ss[:i]))
 	cgb = header[0x0143-begin]
 	cartType = header[0x0147-begin]
 	romSize = header[0x0148-begin]
