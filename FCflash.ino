@@ -670,6 +670,7 @@ void writeRaw(uint8_t OUT_WE, uint32_t addr24, uint8_t buf[], uint16_t length) {
 #define REQ_CPU_WRITE_5BITS_6502 35
 
 #define REQ_RAW_WRITE       64
+#define REQ_RAW_WRITE_WO_CS 65
 
 // index
 #define INDEX_IMPLIED 0
@@ -920,6 +921,18 @@ void loop() {
             writeRaw(RAW_OUT_WE, addr24, readbuf, msg.length);
         }
         digitalWrite(RAW_OUT_CE, HIGH);
+        return;
+    }
+    if (msg.request == REQ_RAW_WRITE_WO_CS) {
+        // addr24: 16bit + zero 8bit = 16MB
+        uint32_t addr24 = (uint32_t)addr << 8;
+        setA15A18(addr24);
+        pinMode(RAW_OUT_OE, OUTPUT); // open-drain -> out
+        digitalWrite(RAW_OUT_OE, HIGH);
+        if (msg.length <= PACKET_SIZE) {
+            Serial.readBytes(readbuf, msg.length);
+            writeRaw(RAW_OUT_WE, addr24, readbuf, msg.length);
+        }
         return;
     }
 }

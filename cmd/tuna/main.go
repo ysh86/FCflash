@@ -36,7 +36,8 @@ const (
 
 	REQ_CPU_WRITE_5BITS_6502 = 35
 
-	REQ_RAW_WRITE = 64
+	REQ_RAW_WRITE       = 64
+	REQ_RAW_WRITE_WO_CS = 65
 )
 
 type Index uint16

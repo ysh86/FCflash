@@ -71,8 +71,19 @@ func main() {
 	}
 	fmt.Printf("%s: %04x\n", fileName, checkSum&0xffff)
 
-	// dump RAM
 	if ramSize != 0 {
+		// clear RAM
+		/*
+			{
+				n, err := gb.ClearRAM(cartType, ramSize)
+				if err != nil {
+					panic(err)
+				}
+				fmt.Printf("clear RAM: %d\n", n)
+			}
+		*/
+
+		// dump RAM
 		w, err := os.Create(ramName)
 		if err != nil {
 			panic(err)
