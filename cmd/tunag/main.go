@@ -72,7 +72,18 @@ func main() {
 	fmt.Printf("%s: %04x\n", fileName, checkSum&0xffff)
 
 	// dump RAM
-	fmt.Printf("%s: %d\n", ramName, ramSize)
+	if ramSize != 0 {
+		w, err := os.Create(ramName)
+		if err != nil {
+			panic(err)
+		}
+		defer w.Close()
+		n, err := gb.DumpRAM(w, cartType, ramSize)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("%s: %d\n", ramName, n)
+	}
 }
 
 func parseHeader(buf []byte) (title string, cgb, cartType, romSize, ramSize byte) {

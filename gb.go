@@ -135,7 +135,7 @@ func (g *GB) DumpROM(w io.Writer, cartType, romSize byte) (checkSum uint32, err 
 		for ; currAddr < 0x7FFF; currAddr += PACKET_SIZE {
 			err = g.ReadFull(currAddr)
 			if err != nil {
-				return 0, err
+				return checkSum, err
 			}
 			w.Write(g.Buf)
 
@@ -152,4 +152,70 @@ func (g *GB) DumpROM(w io.Writer, cartType, romSize byte) (checkSum uint32, err 
 	fmt.Printf("\n")
 
 	return checkSum, nil
+}
+
+func (g *GB) DumpRAM(w io.Writer, cartType, ramSize byte) (size uint32, err error) {
+	numBanks := 0
+	switch ramSize {
+	case 0:
+		// MBC2 includes a built-in RAM
+		if cartType == 6 {
+			size = 512 // nibbles
+			numBanks = 1
+		} else {
+			return size, fmt.Errorf("invalid ramSize: %d", ramSize)
+		}
+	case 1:
+		size = 2 * 1024
+		numBanks = 1
+	case 2:
+		size = 8 * 1024
+		numBanks = 1
+	case 3:
+		size = 32 * 1024
+		numBanks = 4
+	case 4:
+		size = 128 * 1024
+		numBanks = 16
+	case 5:
+		size = 64 * 1024
+		numBanks = 8
+	default:
+		return size, fmt.Errorf("invalid ramSize: %d", ramSize)
+	}
+
+	// MBC1
+	if cartType < 5 {
+		g.writeByte(0x6000, 1) // Set RAM Mode
+	}
+
+	// enable RAM
+	g.writeByte(0x0000, 0x0a)
+
+	// Switch RAM banks: 8[KB/bank] @ a000-end
+	for currBank := 0; currBank < numBanks; currBank++ {
+		g.writeByte(0x4000, currBank)
+
+		for addr := uint32(0); addr < 8192; addr += PACKET_SIZE {
+			err = g.ReadFull(0xa000 + addr)
+			if err != nil {
+				return 0, err
+			}
+			if size < PACKET_SIZE {
+				w.Write(g.Buf[0:size])
+				break
+			}
+			w.Write(g.Buf)
+		}
+	}
+
+	// disable RAM
+	g.writeByte(0x0000, 0x00)
+
+	// MBC1
+	if cartType < 5 {
+		g.writeByte(0x6000, 0)
+	}
+
+	return size, nil
 }
