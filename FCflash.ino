@@ -50,9 +50,9 @@ constexpr uint8_t EEP_OUT_PRG_CE = 13;    // PC7
 constexpr uint8_t EEP_OPEN_DRAIN_WE = 12; // PD6: open-drain
 
 // Raw
-constexpr uint8_t RAW_OUT_OE = 13; // PC7
+constexpr uint8_t RAW_OUT_OE = 12; // PD6: open-drain
 //constexpr uint8_t RAW_OUT_OE = 5;  // Mask ROM
-constexpr uint8_t RAW_OUT_WE = 12; // PD6
+constexpr uint8_t RAW_OUT_WE = 13; // PC7
 constexpr uint8_t RAW_OUT_CE = 11; // shared with ROMSEL
 constexpr uint8_t RAW_OUT_A15 = 4; // shared with PPU_A13
 constexpr uint8_t RAW_OUT_A16 = 5; // shared with PPU_RD
@@ -608,6 +608,41 @@ void writeFlash(uint8_t OUT_CE, uint16_t addr15, uint8_t buf[], uint16_t length)
     PORTF |= 0xf0;
     DDRF &= ~0xf0;
 }
+void writeRaw(uint8_t OUT_WE, uint32_t addr24, uint8_t buf[], uint16_t length) {
+    // I/O pins: output
+    DDRD |= 0x0f;
+    DDRF |= 0xf0;
+
+    clearA00A07();
+    for (uint16_t currByte = 0; currByte < length; currByte++) {
+        uint8_t data = buf[currByte];
+
+        noInterrupts();
+        nextA00A07(currByte);
+        setA08A14(addr24 + currByte);
+
+        digitalWrite(OUT_WE, LOW);
+        PORTD = (PORTD & 0xf0) | (data & 0x0f);
+        PORTF = (PORTF & 0x0f) | (data & 0xf0);
+        __asm__(
+            "nop\n\t"
+            "nop\n\t"
+        );
+        digitalWrite(OUT_WE, HIGH);
+        __asm__(
+            "nop\n\t"
+            "nop\n\t"
+        );
+
+        interrupts();
+    }
+
+    // I/O pins: input/pull-up
+    PORTD |= 0x0f;
+    DDRD &= ~0x0f;
+    PORTF |= 0xf0;
+    DDRF &= ~0xf0;
+}
 
 
 /******************************************
@@ -633,6 +668,8 @@ void writeFlash(uint8_t OUT_CE, uint16_t addr15, uint8_t buf[], uint16_t length)
 #define REQ_RAW_WRITE_FLASH 34
 
 #define REQ_CPU_WRITE_5BITS_6502 35
+
+#define REQ_RAW_WRITE       64
 
 // index
 #define INDEX_IMPLIED 0
@@ -837,44 +874,52 @@ void loop() {
         // addr24: 16bit + zero 8bit = 16MB
         uint32_t addr24 = (uint32_t)addr << 8;
         setA15A18(addr24);
-        pinMode(RAW_OUT_WE, OUTPUT);
-        digitalWrite(RAW_OUT_WE, HIGH);
+        pinMode(RAW_OUT_OE, OUTPUT); // open-drain -> out
+        digitalWrite(RAW_OUT_OE, HIGH);
         digitalWrite(RAW_OUT_CE, LOW);
         if (msg.length <= PACKET_SIZE) {
             readBytes(RAW_OUT_OE, addr24, readbuf, msg.length);
             Serial.write(readbuf, msg.length);
         }
         digitalWrite(RAW_OUT_CE, HIGH);
-        digitalWrite(RAW_OUT_WE, LOW);
-        pinMode(RAW_OUT_WE, INPUT);
         return;
     }
     if (msg.request == REQ_RAW_ERASE_FLASH) {
-        pinMode(RAW_OUT_WE, OUTPUT);
-        digitalWrite(RAW_OUT_WE, HIGH);
+        pinMode(RAW_OUT_OE, OUTPUT); // open-drain -> out
+        digitalWrite(RAW_OUT_OE, HIGH);
         digitalWrite(RAW_OUT_CE, LOW);
         {
             eraseFlash(RAW_OUT_WE, addr/* == 0xff */);
         }
         digitalWrite(RAW_OUT_CE, HIGH);
-        digitalWrite(RAW_OUT_WE, LOW);
-        pinMode(RAW_OUT_WE, INPUT);
         return;
     }
     if (msg.request == REQ_RAW_WRITE_FLASH) {
         // addr24: 16bit + zero 8bit = 16MB
         uint32_t addr24 = (uint32_t)addr << 8;
         setA15A18(addr24);
-        pinMode(RAW_OUT_WE, OUTPUT);
-        digitalWrite(RAW_OUT_WE, HIGH);
+        pinMode(RAW_OUT_OE, OUTPUT); // open-drain -> out
+        digitalWrite(RAW_OUT_OE, HIGH);
         digitalWrite(RAW_OUT_CE, LOW);
         if (msg.length <= PACKET_SIZE) {
             Serial.readBytes(readbuf, msg.length);
             writeFlash(RAW_OUT_WE, addr24, readbuf, msg.length);
         }
         digitalWrite(RAW_OUT_CE, HIGH);
-        digitalWrite(RAW_OUT_WE, LOW);
-        pinMode(RAW_OUT_WE, INPUT);
+        return;
+    }
+    if (msg.request == REQ_RAW_WRITE) {
+        // addr24: 16bit + zero 8bit = 16MB
+        uint32_t addr24 = (uint32_t)addr << 8;
+        setA15A18(addr24);
+        pinMode(RAW_OUT_OE, OUTPUT); // open-drain -> out
+        digitalWrite(RAW_OUT_OE, HIGH);
+        digitalWrite(RAW_OUT_CE, LOW);
+        if (msg.length <= PACKET_SIZE) {
+            Serial.readBytes(readbuf, msg.length);
+            writeRaw(RAW_OUT_WE, addr24, readbuf, msg.length);
+        }
+        digitalWrite(RAW_OUT_CE, HIGH);
         return;
     }
 }
