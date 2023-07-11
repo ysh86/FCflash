@@ -73,17 +73,6 @@ func main() {
 	fmt.Printf("%s: %04x\n", fileName, checkSum&0xffff)
 
 	if ramSize != 0 {
-		// clear RAM
-		/*
-			{
-				n, err := gb.ClearRAM(cartType, ramSize)
-				if err != nil {
-					panic(err)
-				}
-				fmt.Printf("clear RAM: %d\n", n)
-			}
-		*/
-
 		// dump RAM
 		w, err := os.Create(ramName)
 		if err != nil {
@@ -95,6 +84,17 @@ func main() {
 			panic(err)
 		}
 		fmt.Printf("%s: %d\n", ramName, n)
+
+		// clear RAM
+		/*
+			{
+				n, err := gb.ClearRAM(cartType, ramSize)
+				if err != nil {
+					panic(err)
+				}
+				fmt.Printf("clear RAM: %d\n", n)
+			}
+		*/
 	}
 }
 
@@ -103,17 +103,12 @@ func parseHeader(buf []byte) (title string, cgb, cartType, romSize, ramSize byte
 	header := buf[begin:0x0150]
 
 	t := header[0:(0x0143 - begin)]
-	ss := make([]byte, len(t))
-	i := 0
-	for _, s := range t {
-		if s == 0 {
-			break
-		}
-		ss[i] = s
-		i += 1
+	i := bytes.IndexByte(t, 0x00)
+	if i != -1 {
+		t = t[:i]
 	}
 
-	title = string(bytes.TrimSpace(ss[:i]))
+	title = string(bytes.TrimSpace(t))
 	cgb = header[0x0143-begin]
 	cartType = header[0x0147-begin]
 	romSize = header[0x0148-begin]
