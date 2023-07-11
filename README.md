@@ -1,4 +1,4 @@
-ROM/EEPROM/Flash reader/writer for FC
+ROM/EEPROM/Flash/SRAM reader/writer for FC/GB/GBC
 =============================================
 
 Arduino
@@ -24,6 +24,41 @@ cmd
 
 ### tuna
 Host tool of the reader/writer for FC.
+```bash
+$ ./tuna -h
+Usage of ./tuna:
+  -baud int
+        baud rate (default 115200)
+  -chr int
+        Size of CHR ROM in 8KB units (Value 0 means the board uses CHR RAM)
+  -com int
+        com port (default 5)
+  -eeprom
+        write NROM EEPROM
+  -flash
+        write Flash
+  -mapper int
+        mapper 0:NROM, 1:SxROM, 4:TxROM (default 1)
+  -mirror int
+        0:H, 1:V, 2:battery-backed PRG RAM (default 2)
+  -prg int
+        Size of PRG ROM in 16KB units (default 16)
+  -raw
+        raw access to ROM/RAM/EEPROM/Flash ICs
+```
+
+### tunag
+Host tool of the reader/writer for GB/GBC
+```bash
+$ ./tunag -h
+Usage of ./tunag:
+  -baud int
+        baud rate (default 115200)
+  -com int
+        com port (default 5)
+  -ram
+        write RAM in cartridge
+```
 
 ### dlzss
 LZSS decompressor.

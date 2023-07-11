@@ -1,6 +1,6 @@
 module github.com/ysh86/FCflash
 
-go 1.17
+go 1.20
 
 require (
 	github.com/blacktop/lzss v0.1.1
