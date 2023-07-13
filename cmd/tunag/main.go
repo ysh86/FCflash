@@ -51,6 +51,17 @@ func main() {
 		panic(err)
 	}
 	title, cgb, cartType, romSize, ramSize := parseHeader(gb.Buf)
+
+	// GBM cart
+	if title == FCflash.GBM_MENU_TITLE {
+		err := gbm(gb)
+		if err != nil {
+			panic(err)
+		}
+		return
+	}
+
+	// normal cart
 	if !ram {
 		if cgb == 0xc0 {
 			fileName = title + ".gbc"
@@ -129,4 +140,63 @@ func parseHeader(buf []byte) (title string, cgb, cartType, romSize, ramSize byte
 	fmt.Printf("\n")
 
 	return
+}
+
+func gbm(gbm *FCflash.GB) error {
+	err := gbm.DetectGBM()
+	if err != nil {
+		return err
+	}
+
+	// Map info
+	fmap, err := os.Create("GBM.map")
+	if err != nil {
+		return err
+	}
+	defer fmap.Close()
+	err = gbm.ReadMappingGBM(fmap)
+	if err != nil {
+		return err
+	}
+
+	// print Map info
+	mapping := make([]byte, 128)
+	copy(mapping, gbm.Buf[0:128])
+	fmt.Printf("mapping: %+v\n", mapping)
+
+	// Map entire ROM
+	err = gbm.MapEntireROM()
+	if err != nil {
+		return err
+	}
+
+	// dump ROM
+	fileName := "GBMMBC4.gbc"
+	w, err := os.Create(fileName)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+	checkSum, err := gbm.DumpROM(w, FCflash.GBM_ENTIRE_MBC, FCflash.GBM_ENTIRE_ROM_SIZE)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s: %04x\n", fileName, checkSum&0xffff)
+
+	// dump RAM
+	{
+		ramName := "GBMMBC4.sav"
+		w, err := os.Create(ramName)
+		if err != nil {
+			return err
+		}
+		defer w.Close()
+		n, err := gbm.DumpRAM(w, FCflash.GBM_ENTIRE_MBC, FCflash.GBM_ENTIRE_RAM_SIZE)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("%s: %d\n", ramName, n)
+	}
+
+	return nil
 }
