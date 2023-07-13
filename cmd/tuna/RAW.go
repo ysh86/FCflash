@@ -5,15 +5,17 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/ysh86/FCflash"
 )
 
 func dumpRAW(f io.Writer, s io.ReadWriter, size int, buf []uint8) (err error) {
-	for i := 0; i < size; i += PACKET_SIZE {
+	for i := 0; i < size; i += FCflash.PACKET_SIZE {
 		buf[0] = 0 // _reserverd
-		buf[1] = uint8(REQ_RAW_READ)
-		binary.LittleEndian.PutUint16(buf[2:4], uint16(i>>8))          // Value
-		binary.LittleEndian.PutUint16(buf[4:6], uint16(INDEX_IMPLIED)) // index
-		binary.LittleEndian.PutUint16(buf[6:8], PACKET_SIZE)           // Length
+		buf[1] = uint8(FCflash.REQ_RAW_READ)
+		binary.LittleEndian.PutUint16(buf[2:4], uint16(i>>8))                  // Value
+		binary.LittleEndian.PutUint16(buf[4:6], uint16(FCflash.INDEX_IMPLIED)) // index
+		binary.LittleEndian.PutUint16(buf[6:8], FCflash.PACKET_SIZE)           // Length
 		_, err = s.Write(buf[0:8])
 		if err != nil {
 			return err
@@ -48,9 +50,9 @@ func writeFlash(s io.Writer, fileName string, size int, buf []uint8) error {
 	// erase automatically
 	/*
 		buf[0] = 0 // _reserverd
-		buf[1] = uint8(REQ_RAW_ERASE_FLASH)
+		buf[1] = uint8(FCflash.REQ_RAW_ERASE_FLASH)
 		binary.LittleEndian.PutUint16(buf[2:4], 0xff)                  // Value
-		binary.LittleEndian.PutUint16(buf[4:6], uint16(INDEX_IMPLIED)) // index
+		binary.LittleEndian.PutUint16(buf[4:6], uint16(FCflash.INDEX_IMPLIED)) // index
 		binary.LittleEndian.PutUint16(buf[6:8], 0)                     // Length
 		_, err = s.Write(buf[0:8])
 		if err != nil {
@@ -59,14 +61,14 @@ func writeFlash(s io.Writer, fileName string, size int, buf []uint8) error {
 		fmt.Println("erased")
 	*/
 
-	for i := 0; i < size; i += PACKET_SIZE {
+	for i := 0; i < size; i += FCflash.PACKET_SIZE {
 		fmt.Printf(".")
 
 		buf[0] = 0 // _reserverd
-		buf[1] = uint8(REQ_RAW_WRITE_FLASH)
-		binary.LittleEndian.PutUint16(buf[2:4], uint16(i>>8))          // Value
-		binary.LittleEndian.PutUint16(buf[4:6], uint16(INDEX_IMPLIED)) // index
-		binary.LittleEndian.PutUint16(buf[6:8], PACKET_SIZE)           // Length
+		buf[1] = uint8(FCflash.REQ_RAW_WRITE_FLASH)
+		binary.LittleEndian.PutUint16(buf[2:4], uint16(i>>8))                  // Value
+		binary.LittleEndian.PutUint16(buf[4:6], uint16(FCflash.INDEX_IMPLIED)) // index
+		binary.LittleEndian.PutUint16(buf[6:8], FCflash.PACKET_SIZE)           // Length
 		_, err = s.Write(buf[0:8])
 		if err != nil {
 			return err
