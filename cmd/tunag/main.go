@@ -159,7 +159,36 @@ func gbm(gbm *FCflash.GB) error {
 		return err
 	}
 
-	// print Map info
+	// TODO: print Map info
+	// https://github.com/lesserkuma/FlashGBX/blob/master/FlashGBX/GBMemory.py
+	// https://forums.nesdev.org/viewtopic.php?f=12&t=11453&start=135#p161062
+	//
+	// keys = ["mapper_params",
+	//         "f_size", "b_size",
+	//         "game_code", "title", "timestamp", "kiosk_id",
+	//         "write_count",
+	//         "cart_id",
+	//         "padding", "unknown"]
+	// 24: 3byte * 8本
+	//  H: FFFF uint16
+	//  H: FFFF uint16
+	// 12: FF
+	// 44: FF
+	// 18: FF
+	//  8: FF
+	//  H: write count uint16
+	//  8: cart ID
+	//  6: FF
+	//  H: 0000 uint16
+	//
+	// 00 23 3f: 000 000 00 0 23 3f
+	// 00 00 01:
+	// a5 00 01: 101 010 01 0 00 01
+	//
+	// https://forums.nesdev.org/viewtopic.php?p=163123&sid=ac1abb99aa8b0c98ad50e945e26f33b9#p163123
+	// 1C000h + 200h * 8 本
+	// ...
+	//
 	mapping := make([]byte, 128)
 	copy(mapping, gbm.Buf[0:128])
 	fmt.Printf("mapping: %+v\n", mapping)
