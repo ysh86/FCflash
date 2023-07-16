@@ -18,12 +18,14 @@ func main() {
 		com      int
 		baud     int
 		ram      bool
+		flash    bool
 		fileName string
 		ramName  string
 	)
 	flag.IntVar(&com, "com", 5, "com port")
 	flag.IntVar(&baud, "baud", 115200, "baud rate")
 	flag.BoolVar(&ram, "ram", false, "write RAM in cartridge")
+	flag.BoolVar(&flash, "flash", false, "write Flash")
 	flag.Parse()
 	if ram {
 		args := flag.Args()
@@ -44,6 +46,14 @@ func main() {
 
 	// start
 	gb := FCflash.NewGB(s)
+
+	if flash {
+		err := writeFlash(gb)
+		if err != nil {
+			panic(err)
+		}
+		return
+	}
 
 	// header
 	err = gb.ReadFull(0)
@@ -83,7 +93,7 @@ func main() {
 	}
 	fmt.Printf("%s: %04x\n", fileName, checkSum&0xffff)
 
-	if ramSize != 0 {
+	if ramSize != 0 || cartType == 6 {
 		// dump RAM
 		w, err := os.Create(ramName)
 		if err != nil {
@@ -140,6 +150,16 @@ func parseHeader(buf []byte) (title string, cgb, cartType, romSize, ramSize byte
 	fmt.Printf("\n")
 
 	return
+}
+
+func writeFlash(gb *FCflash.GB) error {
+	manufacturerCode, deviceCode, err := gb.DetectFlash()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("flash: manufacturerCode=%02x, deviceCode=%02x\n", manufacturerCode, deviceCode)
+
+	return nil
 }
 
 func gbm(gbm *FCflash.GB) error {

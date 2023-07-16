@@ -1,7 +1,6 @@
 package FCflash
 
 import (
-	"encoding/binary"
 	"errors"
 	"io"
 	"time"
@@ -40,58 +39,28 @@ const (
 	CMD_C0h_MAP_SELECTED_GAME_WITHOUT_RESET = 0xc0
 )
 
-func (g *GB) readRegGBM(addr uint16) (byte, error) {
-	g.Buf[0] = 0 // _reserverd
-	g.Buf[1] = uint8(REQ_RAW_READ_LO)
-	binary.LittleEndian.PutUint16(g.Buf[2:4], addr)                  // Value
-	binary.LittleEndian.PutUint16(g.Buf[4:6], uint16(INDEX_IMPLIED)) // index
-	binary.LittleEndian.PutUint16(g.Buf[6:8], 1)                     // Length
-	_, err := g.s.Write(g.Buf[0:8])
-	if err != nil {
-		return 0, err
-	}
-
-	_, err = io.ReadFull(g.s, g.Buf[8:(8+1)])
-	if err != nil {
-		return 0, err
-	}
-
-	return g.Buf[8], nil
-}
-
-func (g *GB) writeRegGBM(addr uint16, data byte) error {
-	g.Buf[0] = 0 // _reserverd
-	g.Buf[1] = uint8(REQ_RAW_WRITE_LO)
-	binary.LittleEndian.PutUint16(g.Buf[2:4], addr)                  // Value
-	binary.LittleEndian.PutUint16(g.Buf[4:6], uint16(INDEX_IMPLIED)) // index
-	binary.LittleEndian.PutUint16(g.Buf[6:8], 1)                     // Length
-	g.Buf[8] = data
-	_, err := g.s.Write(g.Buf[0:(8 + 1)])
-	return err
-}
-
 func (g *GB) commandGBM(command byte, addr uint16, data byte) {
 	if command != CMD_C0h_MAP_SELECTED_GAME_WITHOUT_RESET {
-		g.writeRegGBM(0x0120, command)
+		g.writeFlashReg(0x0120, command)
 	} else {
-		g.writeRegGBM(0x0120, command&data) // select game
+		g.writeFlashReg(0x0120, command&data) // select game
 	}
 
 	if command == CMD_09h_WAKEUP_AND_RE_ENABLE_FLASH_REGS {
-		g.writeRegGBM(0x0121, 0xAA)
-		g.writeRegGBM(0x0122, 0x55)
+		g.writeFlashReg(0x0121, 0xAA)
+		g.writeFlashReg(0x0122, 0x55)
 	}
 	if command == CMD_0Ah_WRITE_ENABLE_STEP_1 {
-		g.writeRegGBM(0x0125, 0x62)
-		g.writeRegGBM(0x0126, 0x04)
+		g.writeFlashReg(0x0125, 0x62)
+		g.writeFlashReg(0x0126, 0x04)
 	}
 	if command == CMD_0Fh_WRITE_TO_FLASH {
-		g.writeRegGBM(0x0125, byte((addr>>8)&0xff)) // high
-		g.writeRegGBM(0x0126, byte(addr&0xff))      // low
-		g.writeRegGBM(0x0127, data)
+		g.writeFlashReg(0x0125, byte((addr>>8)&0xff)) // high
+		g.writeFlashReg(0x0126, byte(addr&0xff))      // low
+		g.writeFlashReg(0x0127, data)
 	}
 
-	g.writeRegGBM(0x013F, 0xA5)
+	g.writeFlashReg(0x013F, 0xA5)
 }
 
 func (g *GB) resetGBMFlash() {
@@ -99,7 +68,7 @@ func (g *GB) resetGBMFlash() {
 	g.commandGBM(CMD_09h_WAKEUP_AND_RE_ENABLE_FLASH_REGS, 0, 0)
 
 	// Send reset command
-	g.writeRegGBM(0x2100, 0x01)
+	g.writeFlashReg(0x2100, 0x01)
 	g.commandGBM(CMD_0Fh_WRITE_TO_FLASH, 0x5555, 0xAA)
 	g.commandGBM(CMD_0Fh_WRITE_TO_FLASH, 0x2AAA, 0x55)
 	g.commandGBM(CMD_0Fh_WRITE_TO_FLASH, 0x5555, 0xF0)
@@ -115,7 +84,7 @@ func (g *GB) DetectGBM() error {
 	// First byte of NP register is always 0x21
 	i := 0
 	for ; i < 1000; i++ {
-		reg0120h, err := g.readRegGBM(0x0120)
+		reg0120h, err := g.readFlashReg(0x0120)
 		if err != nil {
 			return err
 		}
@@ -146,7 +115,7 @@ func (g *GB) ReadMappingGBM(w io.Writer) error {
 	g.commandGBM(CMD_02h_WRITE_ENABLE_STEP_2, 0, 0)
 
 	// Enable hidden mapping area
-	g.writeRegGBM(0x2100, 0x01)
+	g.writeFlashReg(0x2100, 0x01)
 	g.commandGBM(CMD_0Fh_WRITE_TO_FLASH, 0x5555, 0xAA)
 	g.commandGBM(CMD_0Fh_WRITE_TO_FLASH, 0x2AAA, 0x55)
 	g.commandGBM(CMD_0Fh_WRITE_TO_FLASH, 0x5555, 0x77)
