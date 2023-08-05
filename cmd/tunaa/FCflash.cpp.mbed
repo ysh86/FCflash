@@ -85,20 +85,20 @@ BusInOut A16_23_ROM_D0_7_RAM(
 
 // pins are active low therefore everything is disabled now
 DigitalOut WR(PE_4, 1);
-DigitalOut RD(PE_5, 1);
-DigitalOut CS(PE_6, 1);
+DigitalInOut RD(PE_5, PIN_OUTPUT, PullDefault, 1);
+DigitalInOut CS(PE_6, PIN_OUTPUT, PullDefault, 1);
 DigitalOut CS2(PB_1, 1);
 
 // for FC
 //
-// A0-12:       AD0-12
-// CPU A13-14:  AD13-14
-// PPU_A13:     AD15
-// D0-7:        A16_23_ROM_D0_7_RAM
-#define ROMSEL  CS
-#define PHI2    CS2
-#define CPU_RW  WR // R:1, W:0
-#define PPU_RD  RD
+// A0-12:         AD0-12
+// CPU A13-14:    AD13-14
+// PPU_A13:       AD15
+// D0-7:          A16_23_ROM_D0_7_RAM
+#define ROMSEL_OD CS
+#define PHI2      CS2
+#define CPU_RW    WR // R:1, W:0
+#define PPU_RD_OD RD
 
 void setupBoardRegs()
 {
@@ -237,11 +237,12 @@ void writeByte(word addr, byte data)
 *****************************************/
 #define PRG_BASE 0x8000
 
-uint8_t readByteFC(DigitalOut *OE) {
+uint8_t readByteFC(DigitalInOut *OE) {
     // already disabled all chips (PRG, W-RAM & CHR)
-    if (OE == &ROMSEL) {
+    if (OE == &ROMSEL_OD) {
         // PRG
-        ROMSEL = 0; // select chip
+        //ROMSEL_OD = 0; // select chip
+        ROMSEL_OD.output();
         PHI2 = 1;   // enable read & set addr
     } else {
         // CHR, RAW
@@ -252,10 +253,11 @@ uint8_t readByteFC(DigitalOut *OE) {
     // read
     uint8_t temp = A16_23_ROM_D0_7_RAM;
 
-    if (OE == &ROMSEL) {
+    if (OE == &ROMSEL_OD) {
         // PRG
         PHI2 = 0;
-        ROMSEL = 1;
+        //ROMSEL_OD = 1;
+        ROMSEL_OD.input();
     } else {
         // CHR, RAW
         *OE = 1;
@@ -264,7 +266,7 @@ uint8_t readByteFC(DigitalOut *OE) {
 
     return temp;
 }
-void writeByteFC(DigitalOut *CE, DigitalOut *WE, uint8_t data) {
+void writeByteFC(DigitalInOut *CE, DigitalOut *WE, uint8_t data) {
     // already disabled both chips (MMC & W-RAM)
     *WE = 0; // enable write
 
@@ -272,13 +274,15 @@ void writeByteFC(DigitalOut *CE, DigitalOut *WE, uint8_t data) {
     A16_23_ROM_D0_7_RAM.output();
     A16_23_ROM_D0_7_RAM = data;
 
-    ROMSEL = 0; // select MMC:0 or W-RAM:1
+    //ROMSEL_OD = 0; // select MMC:0 or W-RAM:1
+    ROMSEL_OD.output();
     PHI2 = 1;   // enable that chip & set addr
     wait_ns(500);
 
     // latch
     PHI2 = 0;
-    ROMSEL = 1;
+    //ROMSEL_OD = 1;
+    ROMSEL_OD.input();
 
     A16_23_ROM_D0_7_RAM.input();
     A16_23_ROM_D0_7_RAM.mode(PullUp);
@@ -365,6 +369,12 @@ int main() {
         }
         // for FC
         if (msg.request == REQ_CPU_READ) {
+            ROMSEL_OD.input();
+            PPU_RD_OD.input();
+            ROMSEL_OD.mode(OpenDrain);
+            PPU_RD_OD.mode(OpenDrain);
+            //ROMSEL_OD = 0;
+            //PPU_RD_OD = 0;
             PHI2 = 0;
             AD0_15.output();
             AD0_15 = PRG_BASE; // PPU_A13 = 1
@@ -374,13 +384,19 @@ int main() {
                 for (uint32_t i = 0; i < msg.length; i++) {
                     AD0_15 = addr16 + i;
                     wait_ns(200);
-                    readbuf[i] = readByteFC(&ROMSEL);
+                    readbuf[i] = readByteFC(&ROMSEL_OD);
                 }
                 serial.write(readbuf, msg.length);
             }
             continue;
         }
         if (msg.request == REQ_CPU_WRITE) {
+            ROMSEL_OD.input();
+            PPU_RD_OD.input();
+            ROMSEL_OD.mode(OpenDrain);
+            PPU_RD_OD.mode(OpenDrain);
+            //ROMSEL_OD = 0;
+            //PPU_RD_OD = 0;
             PHI2 = 0;
             AD0_15.output();
             AD0_15 = PRG_BASE; // PPU_A13 = 1
@@ -389,10 +405,16 @@ int main() {
             uint8_t data = msg.length & 0xff;
             AD0_15 = addr16;
             wait_ns(200);
-            writeByteFC(&ROMSEL, &CPU_RW, data);
+            writeByteFC(&ROMSEL_OD, &CPU_RW, data);
             continue;
         }
         if (msg.request == REQ_PPU_READ) {
+            ROMSEL_OD.input();
+            PPU_RD_OD.input();
+            ROMSEL_OD.mode(OpenDrain);
+            PPU_RD_OD.mode(OpenDrain);
+            //ROMSEL_OD = 0;
+            //PPU_RD_OD = 0;
             PHI2 = 0;
             AD0_15.output();
             AD0_15 = PRG_BASE; // PPU_A13 = 1
@@ -402,7 +424,7 @@ int main() {
                 for (uint32_t i = 0; i < msg.length; i++) {
                     AD0_15 = addr16 + i;
                     wait_ns(200);
-                    readbuf[i] = readByteFC(&PPU_RD);
+                    readbuf[i] = readByteFC(&PPU_RD_OD);
                 }
                 serial.write(readbuf, msg.length);
             }
