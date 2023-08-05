@@ -5,7 +5,7 @@ const PACKET_SIZE = 0x400
 type Request uint8
 
 const (
-	REQ_ECHO Request = iota
+	REQ_ECHO Request = iota + 0
 	REQ_PHI2_INIT
 	REQ_CPU_READ_6502
 	REQ_CPU_READ
@@ -13,19 +13,22 @@ const (
 	REQ_CPU_WRITE_6502_5BITS
 	REQ_PPU_READ
 	REQ_PPU_WRITE
-
-	REQ_CPU_WRITE_EEP   = 16
-	REQ_PPU_WRITE_EEP   = 17
-	REQ_CPU_WRITE_FLASH = 18
-
-	REQ_RAW_READ        = 32
-	REQ_RAW_READ_LO     = 33
-	REQ_RAW_WRITE       = 34
-	REQ_RAW_WRITE_LO    = 35
-	REQ_RAW_WRITE_WO_CS = 36
-
-	REQ_RAW_ERASE_FLASH = 64
-	REQ_RAW_WRITE_FLASH = 65
+)
+const (
+	REQ_CPU_WRITE_EEP Request = iota + 16
+	REQ_PPU_WRITE_EEP
+	REQ_CPU_WRITE_FLASH
+)
+const (
+	REQ_RAW_READ Request = iota + 32
+	REQ_RAW_READ_LO
+	REQ_RAW_WRITE
+	REQ_RAW_WRITE_LO
+	REQ_RAW_WRITE_WO_CS
+)
+const (
+	REQ_RAW_ERASE_FLASH Request = iota + 64
+	REQ_RAW_WRITE_FLASH
 )
 
 type Index uint16
