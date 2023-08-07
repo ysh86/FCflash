@@ -1,6 +1,7 @@
 package FCflash
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -62,6 +63,45 @@ func (g *GB) setMemory(addr uint32, value byte, limit uint32) error {
 	}
 	_, err := g.s.Write(g.Buf[0:(8 + n)])
 	return err
+}
+
+func ParseHeader(buf []byte) (title string, cgb, cartType, romSize, ramSize byte, ok bool) {
+	begin := 0x0134
+	header := buf[begin:0x0150]
+
+	t := header[0:(0x0143 - begin)]
+	i := bytes.IndexByte(t, 0x00)
+	if i != -1 {
+		t = t[:i]
+	}
+	title = string(bytes.TrimSpace(t))
+
+	cgb = header[0x0143-begin]
+	cartType = header[0x0147-begin]
+	romSize = header[0x0148-begin]
+	ramSize = header[0x0149-begin]
+
+	sum := 0
+	for i := 0; i < 0x014d-begin; i++ {
+		sum = sum - int(header[i]) - 1
+	}
+	ok = (header[0x014d-begin] == byte(sum&0xff))
+
+	fmt.Printf("title:   %s\n", title)
+	fmt.Printf("isCGB:   %02x\n", header[0x0143-begin])
+	fmt.Printf("licensee:%02x%02x\n", header[0x0144-begin], header[0x0145-begin])
+	fmt.Printf("isSGB:   %02x\n", header[0x0146-begin])
+	fmt.Printf("type:    %02x\n", cartType)
+	fmt.Printf("ROMsize: %02x\n", romSize)
+	fmt.Printf("RAMsize: %02x\n", ramSize)
+	fmt.Printf("dest:    %02x\n", header[0x014a-begin])
+	fmt.Printf("old:     %02x\n", header[0x014b-begin])
+	fmt.Printf("version: %02x\n", header[0x014c-begin])
+	fmt.Printf("complement: %02x (actual: %02x)\n", header[0x014d-begin], sum&0xff)
+	fmt.Printf("checksum:   %02x%02x\n", header[0x014e-begin], header[0x014f-begin])
+	fmt.Printf("\n")
+
+	return
 }
 
 func (g *GB) DumpROM(w io.Writer, cartType, romSize byte) (checkSum uint32, err error) {
