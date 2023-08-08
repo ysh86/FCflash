@@ -96,9 +96,3 @@ LZSS decompressor.
 | 8BIT MUSIC POWER | 430196 | 262626 |
 | 8BIT MUSIC POWER ENCORE | 430212 | 175456 |
 | 8BIT MUSIC POWER FINAL | 430212 | 289760-1 |
-
-### hex2bin
-TBD
-
-### interleave
-TBD

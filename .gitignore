@@ -1,4 +1,8 @@
 build/
 testdata/
 *.nes
+*.gb
+*.gbc
+*.gba
 *.bin
+*.raw
