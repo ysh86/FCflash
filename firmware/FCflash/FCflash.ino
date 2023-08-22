@@ -648,6 +648,49 @@ void writeRaw(uint8_t OUT_WE, uint32_t addr24, uint8_t buf[], uint16_t length) {
     PORTF |= 0xf0;
     DDRF &= ~0xf0;
 }
+void writeRegs(uint8_t OUT_WE, uint8_t buf[], uint16_t length) {
+    // I/O pins: output
+    DDRD |= 0x0f;
+    DDRF |= 0xf0;
+
+    for (uint16_t currByte = 0; currByte < length; currByte += 4) {
+        uint16_t addr15 = buf[currByte] << 8;
+        uint16_t addr8 = buf[currByte+1];
+        uint8_t data = buf[currByte+2];
+        noInterrupts();
+
+        clearA00A07();
+        for (uint16_t a = 1; a <= addr8; a++) {
+            nextA00A07(a);
+        }
+        setA08A14(addr15);
+
+        digitalWrite(OUT_WE, LOW);
+        PORTD = (PORTD & 0xf0) | (data & 0x0f);
+        PORTF = (PORTF & 0x0f) | (data & 0xf0);
+        __asm__(
+            "nop\n\t"
+            "nop\n\t"
+            "nop\n\t"
+            "nop\n\t"
+        );
+        digitalWrite(OUT_WE, HIGH);
+        __asm__(
+            "nop\n\t"
+            "nop\n\t"
+            "nop\n\t"
+            "nop\n\t"
+        );
+
+        interrupts();
+    }
+
+    // I/O pins: input/pull-up
+    PORTD |= 0x0f;
+    DDRD &= ~0x0f;
+    PORTF |= 0xf0;
+    DDRF &= ~0xf0;
+}
 
 
 /******************************************
@@ -673,10 +716,14 @@ void writeRaw(uint8_t OUT_WE, uint32_t addr24, uint8_t buf[], uint16_t length) {
 #define REQ_RAW_READ_LO         33
 #define REQ_RAW_WRITE           34
 #define REQ_RAW_WRITE_LO        35
-#define REQ_RAW_WRITE_WO_CS     36
+#define REQ_RAW_READ_WO_CS      36
+#define REQ_RAW_WRITE_WO_CS     37
+#define REQ_RAW_WRITE_LO_WO_CS  38
 
-#define REQ_RAW_ERASE_FLASH     64
-#define REQ_RAW_WRITE_FLASH     65
+#define REQ_RAW_ERASE_FLASH     48
+#define REQ_RAW_WRITE_FLASH     49
+
+#define REQ_GBM_WRITE_REGS      64
 
 // index
 #define INDEX_IMPLIED 0
@@ -934,6 +981,18 @@ void loop() {
         digitalWrite(RAW_OUT_CE, HIGH);
         return;
     }
+    if (msg.request == REQ_RAW_READ_WO_CS) {
+        // addr24: 16bit + zero 8bit = 16MB
+        uint32_t addr24 = (uint32_t)addr << 8;
+        setA15A18(addr24);
+        pinMode(RAW_OUT_OE, OUTPUT); // open-drain -> out
+        digitalWrite(RAW_OUT_OE, HIGH);
+        if (msg.length <= PACKET_SIZE) {
+            readBytes(RAW_OUT_OE, addr24, readbuf, msg.length);
+            Serial.write(readbuf, msg.length);
+        }
+        return;
+    }
     if (msg.request == REQ_RAW_WRITE_WO_CS) {
         // addr24: 16bit + zero 8bit = 16MB
         uint32_t addr24 = (uint32_t)addr << 8;
@@ -946,6 +1005,17 @@ void loop() {
         }
         return;
     }
+    if (msg.request == REQ_RAW_WRITE_LO_WO_CS) {
+        setA15A18(addr);
+        pinMode(RAW_OUT_OE, OUTPUT); // open-drain -> out
+        digitalWrite(RAW_OUT_OE, HIGH);
+        if (msg.length <= PACKET_SIZE) {
+            Serial.readBytes(readbuf, msg.length);
+            writeRaw(RAW_OUT_WE, addr, readbuf, msg.length);
+        }
+        return;
+    }
+    // Raw Flash
     if (msg.request == REQ_RAW_ERASE_FLASH) {
         pinMode(RAW_OUT_OE, OUTPUT); // open-drain -> out
         digitalWrite(RAW_OUT_OE, HIGH);
@@ -968,6 +1038,17 @@ void loop() {
             writeFlash(RAW_OUT_WE, addr24, readbuf, msg.length);
         }
         digitalWrite(RAW_OUT_CE, HIGH);
+        return;
+    }
+    // GBM
+    if (msg.request == REQ_GBM_WRITE_REGS) {
+        setA15A18(addr);
+        pinMode(RAW_OUT_OE, OUTPUT); // open-drain -> out
+        digitalWrite(RAW_OUT_OE, HIGH);
+        if (msg.length <= PACKET_SIZE) {
+            Serial.readBytes(readbuf, msg.length);
+            writeRegs(RAW_OUT_WE, readbuf, msg.length);
+        }
         return;
     }
 }

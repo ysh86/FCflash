@@ -36,7 +36,7 @@ func (g *GB) ReadFull(offset uint32) error {
 	return nil
 }
 
-func (g *GB) writeRegByte(addr uint32, data int) error {
+func (g *GB) WriteRegByte(addr uint32, data int) error {
 	g.Buf[0] = 0 // _reserverd
 	g.Buf[1] = uint8(REQ_RAW_WRITE_WO_CS)
 	binary.LittleEndian.PutUint16(g.Buf[2:4], uint16(addr>>8))       // Value
@@ -116,24 +116,24 @@ func (g *GB) DumpROM(w io.Writer, cartType, romSize byte) (checkSum uint32, err 
 			// nothing to do
 		} else if cartType < 5 {
 			// MBC1
-			g.writeRegByte(0x6000, 0)             // Set ROM Mode (0: ROM 16Mbit/RAM 8KB mode, 1: ROM 4Mbit/RAM 32KB mode)
-			g.writeRegByte(0x4000, currBank>>5)   // Set bits 5 & 6 (01100000) of ROM bank
-			g.writeRegByte(0x2000, currBank&0x1F) // Set bits 0 & 4 (00011111) of ROM bank
+			g.WriteRegByte(0x6000, 0)             // Set ROM Mode (0: ROM 16Mbit/RAM 8KB mode, 1: ROM 4Mbit/RAM 32KB mode)
+			g.WriteRegByte(0x4000, currBank>>5)   // Set bits 5 & 6 (01100000) of ROM bank
+			g.WriteRegByte(0x2000, currBank&0x1F) // Set bits 0 - 4 (00011111) of ROM bank
 		} else if cartType == 5 || cartType == 6 {
 			// MBC2?
-			g.writeRegByte(0x2100, currBank)
+			g.WriteRegByte(0x2100, currBank)
 		} else if cartType == 0x20 {
 			// MBC6
 			b := currBank << 1
-			g.writeRegByte(0x2000, b)
-			g.writeRegByte(0x2800, 0)
-			g.writeRegByte(0x3000, b+1)
-			g.writeRegByte(0x3800, 0)
+			g.WriteRegByte(0x2000, b)
+			g.WriteRegByte(0x2800, 0)
+			g.WriteRegByte(0x3000, b+1)
+			g.WriteRegByte(0x3800, 0)
 		} else {
 			// MBC5 or ???
 			//g.writeRegByte(0x3000, currBank >> 8); // TODO: Are there 32Mbit ROMs?
 			//g.writeRegByte(0x2000, currBank & 0xFF);
-			g.writeRegByte(0x2100, currBank&0xFF)
+			g.WriteRegByte(0x2100, currBank&0xFF)
 		}
 
 		// Switch bank start address
@@ -202,15 +202,15 @@ func (g *GB) DumpRAM(w io.Writer, cartType, ramSize byte) (size uint32, err erro
 
 	// MBC1
 	if cartType < 5 {
-		g.writeRegByte(0x6000, 1) // Set RAM Mode
+		g.WriteRegByte(0x6000, 1) // Set RAM Mode
 	}
 
 	// enable RAM
-	g.writeRegByte(0x0000, 0x0a)
+	g.WriteRegByte(0x0000, 0x0a)
 
 	// Switch RAM banks: 8[KB/bank] @ a000-end
 	for currBank := 0; currBank < numBanks; currBank++ {
-		g.writeRegByte(0x4000, currBank)
+		g.WriteRegByte(0x4000, currBank)
 
 		for addr := uint32(0); addr < 8192; addr += PACKET_SIZE {
 			err = g.ReadFull(0xa000 + addr)
@@ -226,11 +226,11 @@ func (g *GB) DumpRAM(w io.Writer, cartType, ramSize byte) (size uint32, err erro
 	}
 
 	// disable RAM
-	g.writeRegByte(0x0000, 0x00)
+	g.WriteRegByte(0x0000, 0x00)
 
 	// MBC1
 	if cartType < 5 {
-		g.writeRegByte(0x6000, 0)
+		g.WriteRegByte(0x6000, 0)
 	}
 
 	return size, nil
@@ -244,11 +244,11 @@ func (g *GB) ClearRAM(cartType, ramSize byte) (size uint32, err error) {
 
 	// MBC1
 	if cartType < 5 {
-		g.writeRegByte(0x6000, 1) // Set RAM Mode
+		g.WriteRegByte(0x6000, 1) // Set RAM Mode
 	}
 
 	// enable RAM
-	g.writeRegByte(0x0000, 0x0a)
+	g.WriteRegByte(0x0000, 0x0a)
 
 	// Switch RAM banks: 8[KB/bank] @ a000-end
 	limit := uint32(PACKET_SIZE)
@@ -256,7 +256,7 @@ func (g *GB) ClearRAM(cartType, ramSize byte) (size uint32, err error) {
 		limit = size
 	}
 	for currBank := 0; currBank < numBanks; currBank++ {
-		g.writeRegByte(0x4000, currBank)
+		g.WriteRegByte(0x4000, currBank)
 
 		for addr := uint32(0); addr < 8192; addr += PACKET_SIZE {
 			// zero
@@ -271,11 +271,11 @@ func (g *GB) ClearRAM(cartType, ramSize byte) (size uint32, err error) {
 	}
 
 	// disable RAM
-	g.writeRegByte(0x0000, 0x00)
+	g.WriteRegByte(0x0000, 0x00)
 
 	// MBC1
 	if cartType < 5 {
-		g.writeRegByte(0x6000, 0)
+		g.WriteRegByte(0x6000, 0)
 	}
 
 	return size, nil

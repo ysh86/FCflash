@@ -4,6 +4,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 
@@ -18,6 +19,7 @@ func main() {
 		baud     int
 		ram      bool
 		flash    bool
+		all      bool
 		fileName string
 		ramName  string
 	)
@@ -25,6 +27,7 @@ func main() {
 	flag.IntVar(&baud, "baud", 115200, "baud rate")
 	flag.BoolVar(&ram, "ram", false, "write RAM in cartridge")
 	flag.BoolVar(&flash, "flash", false, "write Flash")
+	flag.BoolVar(&all, "a", false, "dump both ROM & RAM")
 	flag.Parse()
 	if ram {
 		args := flag.Args()
@@ -32,6 +35,13 @@ func main() {
 			panic(errors.New("no file name"))
 		}
 		ramName = args[0]
+	}
+	if flash {
+		args := flag.Args()
+		if len(args) < 1 {
+			panic(errors.New("no file name"))
+		}
+		fileName = args[0]
 	}
 
 	// COM
@@ -46,8 +56,13 @@ func main() {
 	// start
 	gb := FCflash.NewGB(s)
 
+	// ram
+	if ram {
+		panic("not implemented")
+	}
+	// flash
 	if flash {
-		err := writeFlash(gb)
+		err := writeFlash(gb, fileName)
 		if err != nil {
 			panic(err)
 		}
@@ -74,14 +89,12 @@ func main() {
 	}
 
 	// normal cart
-	if !ram {
-		if cgb == 0xc0 {
-			fileName = title + ".gbc"
-		} else {
-			fileName = title + ".gb"
-		}
-		ramName = title + ".sav"
+	if cgb == 0xc0 {
+		fileName = title + ".gbc"
+	} else {
+		fileName = title + ".gb"
 	}
+	ramName = title + ".sav"
 
 	// dump ROM
 	w, err := os.Create(fileName)
@@ -95,8 +108,8 @@ func main() {
 	}
 	fmt.Printf("%s: %04x\n", fileName, checkSum&0xffff)
 
-	if ramSize != 0 || cartType == 6 {
-		// dump RAM
+	// dump RAM
+	if all && (ramSize != 0 || cartType == 6) {
 		w, err := os.Create(ramName)
 		if err != nil {
 			panic(err)
@@ -121,14 +134,50 @@ func main() {
 	}
 }
 
-func writeFlash(gb *FCflash.GB) error {
+func writeFlash(gb *FCflash.GB, fileName string) error {
 	manufacturerCode, deviceCode, err := gb.DetectFlash()
 	if err != nil {
 		return err
 	}
 	fmt.Printf("flash: manufacturerCode=%02x, deviceCode=%02x\n", manufacturerCode, deviceCode)
 
-	return nil
+	if manufacturerCode != 0x01 || deviceCode != 0xad {
+		return fmt.Errorf("not supported device: %02x%02x", manufacturerCode, deviceCode)
+	}
+
+	f, err := os.Open(fileName)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Bank:")
+	buf := make([]byte, 16*1024) // = bank size
+	bank := 0
+	addr := 0
+loop:
+	for {
+		_, err = io.ReadFull(f, buf)
+		if err != nil {
+			break
+		}
+
+		fmt.Printf(" %02x", bank)
+		gb.WriteRegByte(0x2100, bank)
+		for i := 0; i < len(buf); i += FCflash.PACKET_SIZE {
+			err = gb.WriteFlash(addr, buf[i:i+FCflash.PACKET_SIZE])
+			if err != nil {
+				break loop
+			}
+			addr += FCflash.PACKET_SIZE
+		}
+		bank += 1
+	}
+	fmt.Println("")
+	if err == io.EOF {
+		return nil
+	}
+
+	return err
 }
 
 func gbm(gbm *FCflash.GB) error {
@@ -143,7 +192,7 @@ func gbm(gbm *FCflash.GB) error {
 		return err
 	}
 	defer fmap.Close()
-	err = gbm.ReadMappingGBM(fmap)
+	mapping, err := gbm.ReadMappingGBM(fmap)
 	if err != nil {
 		return err
 	}
@@ -178,9 +227,16 @@ func gbm(gbm *FCflash.GB) error {
 	// 1C000h + 200h * 8 本
 	// ...
 	//
-	mapping := make([]byte, 128)
-	copy(mapping, gbm.Buf[0:128])
-	fmt.Printf("mapping: %+v\n", mapping)
+	fmt.Printf("mapping:\n")
+	for i, m := range mapping {
+		if i&15 == 0 {
+			fmt.Printf("%08x", i)
+		}
+		fmt.Printf(" %02x", m)
+		if i&15 == 15 {
+			fmt.Print("\n")
+		}
+	}
 
 	// Map entire ROM
 	err = gbm.MapEntireROM()

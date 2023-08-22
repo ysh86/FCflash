@@ -2,6 +2,7 @@ package FCflash
 
 import (
 	"encoding/binary"
+	"errors"
 	"io"
 )
 
@@ -57,4 +58,96 @@ func (g *GB) DetectFlash() (byte, byte, error) {
 	g.writeFlashReg(0x555, 0xf0)
 
 	return manufacturerCode, deviceCode, nil
+}
+
+func (g *GB) WriteFlash(addr int, buf []byte) error {
+	// Reset
+	g.writeFlashReg(0x555, 0xf0)
+
+	// flash: 64KB sector
+	if addr&0xffff == 0 {
+		// Sector Erase
+		sa := uint16(addr >> 16)
+		g.writeFlashReg(0x555, 0xaa)
+		g.writeFlashReg(0x2aa, 0x55)
+		g.writeFlashReg(0x555, 0x80)
+		g.writeFlashReg(0x555, 0xaa)
+		g.writeFlashReg(0x2aa, 0x55)
+		g.writeFlashReg(sa, 0x30)
+
+		// wait
+		for {
+			status, err := g.readFlashReg(sa)
+			if err != nil {
+				return err
+			}
+			if status&0x80 != 0 {
+				// done
+				break
+			}
+
+			if status&0x20 != 0 {
+				// retry
+				status, err := g.readFlashReg(sa)
+				if err != nil {
+					return err
+				}
+				if status&0x80 != 0 {
+					// done
+					break
+				} else {
+					return errors.New("exceeded time limits")
+				}
+			}
+		}
+	}
+
+	// write
+	for i, d := range buf {
+		if d == 0xff {
+			continue
+		}
+
+		pa := addr + i
+		va := uint16(pa & 0x0000_3fff)
+		if pa >= 0x4000 {
+			va |= 0x4000
+		}
+
+		g.writeFlashReg(0x555, 0xaa)
+		g.writeFlashReg(0x2aa, 0x55)
+		g.writeFlashReg(0x555, 0xa0)
+		g.writeFlashReg(va, d)
+
+		// wait
+		for {
+			status, err := g.readFlashReg(va)
+			if err != nil {
+				return err
+			}
+			if status&0x80 == d&0x80 {
+				// done
+				break
+			}
+
+			if status&0x20 != 0 {
+				// retry
+				status, err := g.readFlashReg(va)
+				if err != nil {
+					return err
+				}
+				if status&0x80 == d&0x80 {
+					// done
+					break
+				} else {
+					return errors.New("exceeded time limits")
+				}
+			}
+		}
+	}
+
+	// Reset
+	g.writeFlashReg(0x555, 0xf0)
+
+	return nil
 }

@@ -60,10 +60,13 @@ Host tool of the reader/writer for GB/GBC
 ```bash
 $ ./tunag -h
 Usage of ./tunag:
+  -a    dump both ROM & RAM
   -baud int
         baud rate (default 115200)
   -com int
         com port (default 5)
+  -flash
+        write Flash
   -ram
         write RAM in cartridge
 ```
