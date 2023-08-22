@@ -135,15 +135,11 @@ func main() {
 }
 
 func writeFlash(gb *FCflash.GB, fileName string) error {
-	manufacturerCode, deviceCode, err := gb.DetectFlash()
+	device, err := gb.IsSupportedFlash()
 	if err != nil {
 		return err
 	}
-	fmt.Printf("flash: manufacturerCode=%02x, deviceCode=%02x\n", manufacturerCode, deviceCode)
-
-	if manufacturerCode != 0x01 || deviceCode != 0xad {
-		return fmt.Errorf("not supported device: %02x%02x", manufacturerCode, deviceCode)
-	}
+	fmt.Printf("flash: manufacturerCode=%02x, deviceCode=%02x\n", device>>8, device&0xff)
 
 	f, err := os.Open(fileName)
 	if err != nil {
@@ -164,7 +160,7 @@ loop:
 		fmt.Printf(" %02x", bank)
 		gb.WriteRegByte(0x2100, bank)
 		for i := 0; i < len(buf); i += FCflash.PACKET_SIZE {
-			err = gb.WriteFlash(addr, buf[i:i+FCflash.PACKET_SIZE])
+			err = gb.WriteFlash(device, addr, buf[i:i+FCflash.PACKET_SIZE])
 			if err != nil {
 				break loop
 			}

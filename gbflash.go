@@ -3,8 +3,18 @@ package FCflash
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 )
+
+var commands map[uint16][2]uint16
+
+func init() {
+	commands = map[uint16][2]uint16{
+		0x01ad: {0x555, 0x2aa}, // AMD Am29F016: 8-bit bus
+		0x01d2: {0xaaa, 0x555}, // Micron M29F160FT: 16-bit bus, 8-bit mode
+	}
+}
 
 func (g *GB) readFlashReg(addr uint16) (byte, error) {
 	g.Buf[0] = 0 // _reserverd
@@ -36,7 +46,7 @@ func (g *GB) writeFlashReg(addr uint16, data byte) error {
 	return err
 }
 
-func (g *GB) DetectFlash() (byte, byte, error) {
+func (g *GB) detectFlash8() (byte, byte, error) {
 	// Reset
 	g.writeFlashReg(0x555, 0xf0)
 
@@ -60,19 +70,64 @@ func (g *GB) DetectFlash() (byte, byte, error) {
 	return manufacturerCode, deviceCode, nil
 }
 
-func (g *GB) WriteFlash(addr int, buf []byte) error {
+func (g *GB) detectFlash16() (byte, byte, error) {
 	// Reset
-	g.writeFlashReg(0x555, 0xf0)
+	g.writeFlashReg(0xaaa, 0xf0)
+
+	// Autoselect Command
+	g.writeFlashReg(0xaaa, 0xaa)
+	g.writeFlashReg(0x555, 0x55)
+	g.writeFlashReg(0xaaa, 0x90)
+
+	manufacturerCode, err := g.readFlashReg(0x0000)
+	if err != nil {
+		return 0, 0, err
+	}
+	deviceCode, err := g.readFlashReg(0x0002)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	// Reset
+	g.writeFlashReg(0xaaa, 0xf0)
+
+	return manufacturerCode, deviceCode, nil
+}
+
+func (g *GB) IsSupportedFlash() (device uint16, err error) {
+	manufacturerCode, deviceCode, err := g.detectFlash8()
+	if err != nil {
+		return 0, err
+	}
+	// AMD Am29F016: 8-bit bus
+	if manufacturerCode != 0x01 || deviceCode != 0xad {
+		manufacturerCode, deviceCode, err = g.detectFlash16()
+		if err != nil {
+			return 0, err
+		}
+		// Micron M29F160FT: 16-bit bus, 8-bit mode
+		if manufacturerCode != 0x01 || deviceCode != 0xd2 {
+			return 0, fmt.Errorf("not supported device: %02x%02x", manufacturerCode, deviceCode)
+		}
+	}
+
+	device = (uint16(manufacturerCode) << 8) | uint16(deviceCode)
+	return device, err
+}
+
+func (g *GB) WriteFlash(device uint16, addr int, buf []byte) error {
+	// Reset
+	g.writeFlashReg(commands[device][0], 0xf0)
 
 	// flash: 64KB sector
 	if addr&0xffff == 0 {
 		// Sector Erase
 		sa := uint16(addr >> 16)
-		g.writeFlashReg(0x555, 0xaa)
-		g.writeFlashReg(0x2aa, 0x55)
-		g.writeFlashReg(0x555, 0x80)
-		g.writeFlashReg(0x555, 0xaa)
-		g.writeFlashReg(0x2aa, 0x55)
+		g.writeFlashReg(commands[device][0], 0xaa)
+		g.writeFlashReg(commands[device][1], 0x55)
+		g.writeFlashReg(commands[device][0], 0x80)
+		g.writeFlashReg(commands[device][0], 0xaa)
+		g.writeFlashReg(commands[device][1], 0x55)
 		g.writeFlashReg(sa, 0x30)
 
 		// wait
@@ -114,9 +169,9 @@ func (g *GB) WriteFlash(addr int, buf []byte) error {
 			va |= 0x4000
 		}
 
-		g.writeFlashReg(0x555, 0xaa)
-		g.writeFlashReg(0x2aa, 0x55)
-		g.writeFlashReg(0x555, 0xa0)
+		g.writeFlashReg(commands[device][0], 0xaa)
+		g.writeFlashReg(commands[device][1], 0x55)
+		g.writeFlashReg(commands[device][0], 0xa0)
 		g.writeFlashReg(va, d)
 
 		// wait
@@ -147,7 +202,7 @@ func (g *GB) WriteFlash(addr int, buf []byte) error {
 	}
 
 	// Reset
-	g.writeFlashReg(0x555, 0xf0)
+	g.writeFlashReg(commands[device][0], 0xf0)
 
 	return nil
 }
