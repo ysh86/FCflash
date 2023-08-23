@@ -2,17 +2,16 @@ package FCflash
 
 import (
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"io"
 )
 
-var commands map[uint16][2]uint16
+var commands map[uint16][3]uint16
 
 func init() {
-	commands = map[uint16][2]uint16{
-		0x01ad: {0x555, 0x2aa}, // AMD Am29F016: 8-bit bus
-		0x01d2: {0xaaa, 0x555}, // Micron M29F160FT: 16-bit bus, 8-bit mode
+	commands = map[uint16][3]uint16{
+		0x01ad: {0x555, 0x2aa, 8},  // AMD Am29F016: 8-bit data bus
+		0x01d2: {0xaaa, 0x555, 16}, // Micron M29F160FT: 16-bit data bus, 8-bit mode
 	}
 }
 
@@ -120,9 +119,14 @@ func (g *GB) WriteFlash(device uint16, addr int, buf []byte) error {
 	g.writeFlashReg(commands[device][0], 0xf0)
 
 	// flash: 64KB sector
+	//  8-bit flash: sa = # of sector
+	// 16-bit flash: sa = phy addr of block
 	if addr&0xffff == 0 {
 		// Sector Erase
 		sa := uint16(addr >> 16)
+		if commands[device][2] == 16 && addr >= 0x10000 {
+			sa = 0x4000 // MBC sets phy addr.
+		}
 		g.writeFlashReg(commands[device][0], 0xaa)
 		g.writeFlashReg(commands[device][1], 0x55)
 		g.writeFlashReg(commands[device][0], 0x80)
@@ -151,7 +155,7 @@ func (g *GB) WriteFlash(device uint16, addr int, buf []byte) error {
 					// done
 					break
 				} else {
-					return errors.New("exceeded time limits")
+					return fmt.Errorf("exceeded time limits: erase sector: %04x", sa)
 				}
 			}
 		}
@@ -195,7 +199,7 @@ func (g *GB) WriteFlash(device uint16, addr int, buf []byte) error {
 					// done
 					break
 				} else {
-					return errors.New("exceeded time limits")
+					return fmt.Errorf("exceeded time limits: write byte: pa=%06x, va=%04x", pa, va)
 				}
 			}
 		}
