@@ -42,18 +42,18 @@ const (
 	CMD_C0h_MAP_SELECTED_GAME_WITHOUT_RESET = 0xc0
 )
 
-func (g *GB) Read256(offset uint32) error {
+func (g *GB) Read128(offset uint32) error {
 	g.Buf[0] = 0 // _reserverd
 	g.Buf[1] = uint8(REQ_RAW_READ_WO_CS)
 	binary.LittleEndian.PutUint16(g.Buf[2:4], uint16(offset>>8))     // Value
 	binary.LittleEndian.PutUint16(g.Buf[4:6], uint16(INDEX_IMPLIED)) // index
-	binary.LittleEndian.PutUint16(g.Buf[6:8], 256)                   // Length
+	binary.LittleEndian.PutUint16(g.Buf[6:8], 128)                   // Length
 	_, err := g.s.Write(g.Buf[0:8])
 	if err != nil {
 		return err
 	}
 
-	_, err = io.ReadFull(g.s, g.Buf[0:256])
+	_, err = io.ReadFull(g.s, g.Buf[0:128])
 	if err != nil {
 		return err
 	}
@@ -67,9 +67,18 @@ func (g *GB) writeGBMReg(addr uint16, data byte) error {
 	binary.LittleEndian.PutUint16(g.Buf[2:4], addr)                  // Value
 	binary.LittleEndian.PutUint16(g.Buf[4:6], uint16(INDEX_IMPLIED)) // index
 	binary.LittleEndian.PutUint16(g.Buf[6:8], 1)                     // Length
+	_, err := g.s.Write(g.Buf[0:8])
+	if err != nil {
+		return err
+	}
+
 	g.Buf[8] = data
-	_, err := g.s.Write(g.Buf[0:(8 + 1)])
-	return err
+	_, err = g.s.Write(g.Buf[8:(8 + 1)])
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (g *GB) commandGBM(command byte, addr uint16, data byte) {
@@ -144,34 +153,50 @@ func (g *GB) DetectGBM() error {
 	return nil
 }
 
-func (g *GB) ReadMappingGBM(w io.Writer) error {
+func (g *GB) ReadMappingGBM(w io.Writer) ([]byte, error) {
 	// Enable ports 0x0120
 	g.commandGBM(CMD_09h_WAKEUP_AND_RE_ENABLE_FLASH_REGS, 0, 0)
+
+	// Set bank 1 for writing addr:0x4000-0x7fff
+	//g.commandGBM(CMD_11h_RE_ENABLE_MBC_REGS, 0, 0)
+	g.commandGBM(CMD_BANK, 0x2100, 0x01)
+	//g.commandGBM(CMD_10h_DISABLE_MBC_REGS, 0, 0)
 
 	// Set WE and WP
 	g.commandGBM(CMD_0Ah_WRITE_ENABLE_STEP_1, 0, 0)
 	g.commandGBM(CMD_02h_WRITE_ENABLE_STEP_2, 0, 0)
 
+	//time.Sleep(100 * time.Millisecond)
+
 	// Enable hidden mapping area
-	g.commandGBM(CMD_BANK, 0x2100, 0x01)
 	g.commandGBM(CMD_0Fh_WRITE_TO_FLASH, 0x5555, 0xAA)
+	//time.Sleep(5 * time.Millisecond)
 	g.commandGBM(CMD_0Fh_WRITE_TO_FLASH, 0x2AAA, 0x55)
+	//time.Sleep(5 * time.Millisecond)
 	g.commandGBM(CMD_0Fh_WRITE_TO_FLASH, 0x5555, 0x77)
+	//time.Sleep(5 * time.Millisecond)
 	g.commandGBM(CMD_0Fh_WRITE_TO_FLASH, 0x5555, 0xAA)
+	//time.Sleep(5 * time.Millisecond)
 	g.commandGBM(CMD_0Fh_WRITE_TO_FLASH, 0x2AAA, 0x55)
+	//time.Sleep(5 * time.Millisecond)
 	g.commandGBM(CMD_0Fh_WRITE_TO_FLASH, 0x5555, 0x77)
 
+	//time.Sleep(100 * time.Millisecond)
+
 	// Read mapping
-	err := g.Read256(0)
+	err := g.ReadFull(0)
+	//err := g.Read128(0)
 	if err != nil {
-		return err
+		return nil, err
 	}
+	_, err = w.Write(g.Buf[0:128])
+	mapping := make([]byte, 128)
+	copy(mapping, g.Buf[0:128])
 
 	// Reset flash to leave hidden mapping area and disable port
 	g.resetGBMFlash()
 
-	_, err = w.Write(g.Buf[0:128])
-	return err
+	return mapping, err
 }
 
 func (g *GB) MapEntireROM() error {
