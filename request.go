@@ -24,11 +24,16 @@ const (
 	REQ_RAW_READ_LO
 	REQ_RAW_WRITE
 	REQ_RAW_WRITE_LO
+	REQ_RAW_READ_WO_CS
 	REQ_RAW_WRITE_WO_CS
+	REQ_RAW_WRITE_LO_WO_CS
 )
 const (
-	REQ_RAW_ERASE_FLASH Request = iota + 64
+	REQ_RAW_ERASE_FLASH Request = iota + 48
 	REQ_RAW_WRITE_FLASH
+)
+const (
+	REQ_GBM_WRITE_REGS Request = iota + 64
 )
 
 type Index uint16
