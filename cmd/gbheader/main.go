@@ -13,20 +13,20 @@ func main() {
 	}
 
 	fileName := os.Args[1]
-	buf, err := os.ReadFile(fileName)
+	data, err := os.ReadFile(fileName)
 	if err != nil {
 		panic(err)
 	}
 
 	// header
-	FCflash.ParseHeader(buf)
+	FCflash.ParseHeader(data)
 
-	// checksum
-	checkSum := uint32(0)
-	for i, b := range buf {
+	// global sum
+	global := uint32(0)
+	for i, d := range data {
 		if i != 0x014e && i != 0x014f {
-			checkSum += uint32(b)
+			global += uint32(d)
 		}
 	}
-	fmt.Printf("%s: %04x\n", fileName, checkSum&0xffff)
+	fmt.Printf("%s: %04x\n", fileName, global&0xffff)
 }
