@@ -43,7 +43,8 @@ constexpr uint8_t OUT_CPU_RW = 6;      // PD7: Read:1, Write:0
 constexpr uint8_t OUT_PPU_RD = 5;      // PC6:
 
 #define ROMSEL(__b__) (PORTB = (PORTB&0b01111111)|((__b__)<<7))
-#define PHI2(__b__) (PORTE = (PORTE&0b10111111)|((__b__)<<6))
+#define PHI2(__b__)   (PORTE = (PORTE&0b10111111)|((__b__)<<6))
+#define CPU_RW(__b__) (PORTD = (PORTD&0b01111111)|((__b__)<<7))
 
 // EEPROM
 constexpr uint8_t EEP_OUT_PRG_CE = 13;    // PC7
@@ -60,6 +61,8 @@ constexpr uint8_t RAW_OUT_A16 = 5; // shared with PPU_RD
 constexpr uint8_t RAW_OUT_A17 = 6; // shared with CPU_RW (swapped addr)
 constexpr uint8_t RAW_OUT_A18 = 7; // shared with PHI2   (swapped addr)
 
+// invalid
+constexpr uint8_t PIN_PLACEHOLDER = 0xff;
 
 /******************************************
   FC
@@ -148,7 +151,12 @@ void writeByte(uint8_t OUT_CS, uint8_t OUT_WE, uint8_t data) {
     PORTD = (PORTD & 0xf0) | (data & 0x0f);
     PORTF = (PORTF & 0x0f) | (data & 0xf0);
 
-    ROMSEL(0); // select MMC:0 or W-RAM:1
+    // select MMC:0 or W-RAM:1
+    if (OUT_CS == OUT_ROMSEL) {
+        ROMSEL(0);
+    } else {
+        ROMSEL(1);
+    }
     PHI2(1);   // enable that chip & set addr
     __asm__(
         "nop\n\t"
@@ -807,6 +815,7 @@ void setup() {
 /******************************************
   main
 *****************************************/
+
 #define PRG_BASE 0x8000
 static uint8_t readbuf[PACKET_SIZE];
 
@@ -845,19 +854,31 @@ void loop() {
         return;
     }
     if (msg.request == REQ_CPU_WRITE_6502) {
-        // addr: 0b100x_xxxx... 0x8000-0x9fff only
-        addr = PRG_BASE | (addr & ~0x6000);
+        // addr: 32(RAM)+32(ROM) KB full
+        uint8_t out = OUT_ROMSEL;
+        if ((addr & PRG_BASE) == 0) {
+            out = PIN_PLACEHOLDER;
+        }
         uint8_t data = msg.length & 0xff;
         clearA00A07();
         noInterrupts();
-        nextA00A07(addr&1);
+        if (out == OUT_ROMSEL) {
+            // MMC regs: 0x8000-0xfff1 (LSB: 0 or 1)
+            nextA00A07(addr&1);
+        } else {
+            // W-RAM: 0x6000-0x7fff
+            for (uint16_t a = 1; a <= (addr & 0xff); a++) {
+                nextA00A07(a);
+            }
+        }
         setA08A14(addr);
-        writeByte(OUT_ROMSEL, OUT_CPU_RW, data);
+        writeByte(out, OUT_CPU_RW, data);
         interrupts();
         return;
     }
     if (msg.request == REQ_CPU_WRITE_6502_5BITS) {
-        // addr: 0x8000-0xffff full
+        // addr: 32KB full
+        // MMC regs: 0x8000-0xfff1 (LSB: 0 or 1)
         addr = PRG_BASE | addr;
         uint8_t five = msg.length & 0x1f;
         clearA00A07();
