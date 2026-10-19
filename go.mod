@@ -1,9 +1,10 @@
 module github.com/ysh86/FCflash
 
-go 1.20
+go 1.25.0
 
 require (
 	github.com/blacktop/lzss v0.1.1
+	github.com/marcinbor85/gohex v0.1.0
 	github.com/tarm/serial v0.0.0-20180830185346-98f6abe2eb07
 )
 
